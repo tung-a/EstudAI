@@ -8,6 +8,7 @@ import { ThemedView } from "@/components/themed-view";
 
 import { addDoc, collection } from "firebase/firestore";
 // Verifique o caminho. Estando em app/(tabs), o caminho correto para a raiz é '../../'
+import { router } from "expo-router";
 import { auth, db } from "../../firebaseConfig";
 
 export default function HomeScreen() {
@@ -32,7 +33,7 @@ export default function HomeScreen() {
         "Aviso",
         "Nenhum utilizador anónimo encontrado. A tentar reconectar..."
       );
-      // Idealmente, aqui você teria uma tela de login real.
+      router.replace("/(auth)/login");
       return;
     }
     if (newTask.trim() === "") {

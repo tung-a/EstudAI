@@ -1,15 +1,24 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { Colors } from "@/constants/theme";
 import { auth } from "@/firebaseConfig";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Link, router } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
-import { Alert, StyleSheet, TextInput, TouchableOpacity } from "react-native";
+import {
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+} from "react-native";
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const colorScheme = useColorScheme() ?? "light";
 
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
@@ -29,34 +38,53 @@ export default function RegisterScreen() {
     <ThemedView style={styles.container}>
       <ThemedText type="title">Register</ThemedText>
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          {
+            color: Colors[colorScheme].text,
+            borderColor: Colors[colorScheme].icon,
+            backgroundColor: Colors[colorScheme].background,
+          },
+        ]}
         placeholder="Email"
-        placeholderTextColor="#666"
+        placeholderTextColor={Colors[colorScheme].icon}
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
       />
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          {
+            color: Colors[colorScheme].text,
+            borderColor: Colors[colorScheme].icon,
+            backgroundColor: Colors[colorScheme].background,
+          },
+        ]}
         placeholder="Password"
-        placeholderTextColor="#666"
+        placeholderTextColor={Colors[colorScheme].icon}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          {
+            color: Colors[colorScheme].text,
+            borderColor: Colors[colorScheme].icon,
+            backgroundColor: Colors[colorScheme].background,
+          },
+        ]}
         placeholder="Confirm Password"
-        placeholderTextColor="#666"
+        placeholderTextColor={Colors[colorScheme].icon}
         secureTextEntry
         value={confirmPassword}
         onChangeText={setConfirmPassword}
       />
-      <TouchableOpacity style={styles.button}>
-        <ThemedText type="link" onPress={handleSignUp}>
-          Create Account
-        </ThemedText>
+      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+        <Text style={styles.buttonText}>Create Account</Text>
       </TouchableOpacity>
       <Link href="/login" style={styles.link}>
         <ThemedText type="link">Already have an account? Login</ThemedText>
@@ -71,23 +99,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
+    gap: 10,
   },
   input: {
     width: "100%",
-    height: 40,
+    height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 5,
+    borderRadius: 8,
     marginVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
+    fontSize: 16,
   },
   button: {
     backgroundColor: "#007AFF",
     padding: 15,
-    borderRadius: 5,
+    borderRadius: 8,
     width: "100%",
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 10,
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 16,
   },
   link: {
     marginTop: 20,
