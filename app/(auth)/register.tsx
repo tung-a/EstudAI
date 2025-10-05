@@ -91,22 +91,6 @@ export default function RegisterScreen() {
               backgroundColor: Colors[colorScheme].background,
             },
           ]}
-          placeholder="Email"
-          placeholderTextColor={Colors[colorScheme].icon}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: Colors[colorScheme].background,
-            },
-          ]}
           placeholder="Idade"
           placeholderTextColor={Colors[colorScheme].icon}
           keyboardType="numeric"
@@ -122,10 +106,26 @@ export default function RegisterScreen() {
               backgroundColor: Colors[colorScheme].background,
             },
           ]}
-          placeholder="Escola"
+          placeholder="Instituição de Ensino"
           placeholderTextColor={Colors[colorScheme].icon}
           value={school}
           onChangeText={setSchool}
+        />
+        <TextInput
+          style={[
+            styles.input,
+            {
+              color: Colors[colorScheme].text,
+              borderColor: Colors[colorScheme].icon,
+              backgroundColor: Colors[colorScheme].background,
+            },
+          ]}
+          placeholder="Email"
+          placeholderTextColor={Colors[colorScheme].icon}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
         />
         <TextInput
           style={[

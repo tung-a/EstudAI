@@ -77,7 +77,7 @@ export default function ProfileScreen() {
           <Text style={styles.label}>Idade:</Text>
           <Text style={styles.info}>{profile.age}</Text>
 
-          <Text style={styles.label}>Escola:</Text>
+          <Text style={styles.label}>Instituição de Ensino:</Text>
           <Text style={styles.info}>{profile.school}</Text>
         </View>
       )}

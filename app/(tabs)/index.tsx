@@ -1,11 +1,23 @@
 import { HelloWave } from "@/components/hello-wave";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { auth } from "../../firebaseConfig";
 
 export default function HomeScreen() {
-  const userName = auth.currentUser?.displayName || "Usuário";
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const userName = user?.displayName || "Usuário";
 
   return (
     <ThemedView style={styles.container}>
@@ -15,7 +27,7 @@ export default function HomeScreen() {
       </View>
       <ThemedText type="title">{userName}!</ThemedText>
       <ThemedText style={styles.subtitle}>
-        Pronto para organizar suas tarefas?
+        Pronto para organizar seus estudos?
       </ThemedText>
     </ThemedView>
   );

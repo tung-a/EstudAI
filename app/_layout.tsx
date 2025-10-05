@@ -22,6 +22,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      // A lógica de redirecionamento permanece a mesma
       if (!user) {
         router.replace("/(auth)/login");
       } else {
@@ -36,6 +37,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
         <Stack.Screen
           name="modal"
           options={{
