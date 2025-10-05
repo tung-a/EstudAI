@@ -9,6 +9,7 @@ import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -26,11 +27,33 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [age, setAge] = useState("");
-  const [school, setSchool] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isEmailValid, setIsEmailValid] = useState(true);
+
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+
+  const validateEmail = (text: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    setIsEmailValid(emailRegex.test(text));
+    setEmail(text);
+  };
+
+  const getPasswordStrength = () => {
+    if (password.length === 0) {
+      return { strength: "", color: "#d9534f" };
+    }
+    if (password.length < 6) {
+      return { strength: "Fraca", color: "#f0ad4e" };
+    }
+    if (password.length < 10) {
+      return { strength: "Média", color: "#5bc0de" };
+    }
+    return { strength: "Forte", color: "#5cb85c" };
+  };
 
   const handleSignUp = async () => {
     setError("");
@@ -38,10 +61,20 @@ export default function RegisterScreen() {
       setError("Por favor, preencha todos os campos obrigatórios.");
       return;
     }
+    if (!isEmailValid) {
+      setError("Por favor, insira um email válido.");
+      return;
+    }
     if (password !== confirmPassword) {
       setError("As senhas não coincidem.");
       return;
     }
+    if (password.length < 6) {
+      setError("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const userCredential = await createUserWithEmailAndPassword(
@@ -56,22 +89,22 @@ export default function RegisterScreen() {
       await setDoc(doc(db, "users", user.uid), {
         name: name,
         email: user.email,
-        age: age,
-        school: school,
       });
 
-      router.replace("/(tabs)");
+      router.replace("/(auth)/welcome");
     } catch (error: any) {
       if (error.code === "auth/email-already-in-use") {
         setError("Este email já está em uso.");
-      } else if (error.code === "auth/weak-password") {
-        setError("A senha deve ter pelo menos 6 caracteres.");
       } else {
         setError("Ocorreu um erro ao criar a conta.");
       }
       console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const passwordStrength = getPasswordStrength();
 
   return (
     <ThemedView style={styles.container}>
@@ -102,32 +135,15 @@ export default function RegisterScreen() {
               />
             </View>
             <View
-              style={[styles.inputContainer, { borderColor: themeColors.icon }]}
-            >
-              <MaterialIcons name="school" size={20} color={themeColors.icon} />
-              <TextInput
-                style={[styles.input, { color: themeColors.text }]}
-                placeholder="Instituição de Ensino (Opcional)"
-                placeholderTextColor={themeColors.icon}
-                value={school}
-                onChangeText={setSchool}
-              />
-            </View>
-            <View
-              style={[styles.inputContainer, { borderColor: themeColors.icon }]}
-            >
-              <MaterialIcons name="cake" size={20} color={themeColors.icon} />
-              <TextInput
-                style={[styles.input, { color: themeColors.text }]}
-                placeholder="Idade (Opcional)"
-                placeholderTextColor={themeColors.icon}
-                keyboardType="numeric"
-                value={age}
-                onChangeText={setAge}
-              />
-            </View>
-            <View
-              style={[styles.inputContainer, { borderColor: themeColors.icon }]}
+              style={[
+                styles.inputContainer,
+                {
+                  borderColor:
+                    !isEmailValid && email.length > 0
+                      ? "red"
+                      : themeColors.icon,
+                },
+              ]}
             >
               <MaterialIcons name="email" size={20} color={themeColors.icon} />
               <TextInput
@@ -137,9 +153,13 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={validateEmail}
               />
             </View>
+            {!isEmailValid && email.length > 0 && (
+              <Text style={styles.errorText}>Formato de email inválido.</Text>
+            )}
+
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
@@ -148,11 +168,29 @@ export default function RegisterScreen() {
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Senha"
                 placeholderTextColor={themeColors.icon}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
               />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <MaterialIcons
+                  name={showPassword ? "visibility-off" : "visibility"}
+                  size={24}
+                  color={themeColors.icon}
+                />
+              </TouchableOpacity>
             </View>
+            <View style={styles.passwordRequirementContainer}>
+              <Text style={{ color: themeColors.icon }}>
+                (mínimo 6 caracteres)
+              </Text>
+              {passwordStrength.strength.length > 0 && (
+                <Text style={{ color: passwordStrength.color }}>
+                  Força: {passwordStrength.strength}
+                </Text>
+              )}
+            </View>
+
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
@@ -165,10 +203,19 @@ export default function RegisterScreen() {
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Confirmar Senha"
                 placeholderTextColor={themeColors.icon}
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
               />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <MaterialIcons
+                  name={showConfirmPassword ? "visibility-off" : "visibility"}
+                  size={24}
+                  color={themeColors.icon}
+                />
+              </TouchableOpacity>
             </View>
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -176,8 +223,13 @@ export default function RegisterScreen() {
             <TouchableOpacity
               style={[styles.button, { backgroundColor: themeColors.accent }]}
               onPress={handleSignUp}
+              disabled={loading}
             >
-              <Text style={styles.buttonText}>Criar Conta</Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Criar Conta</Text>
+              )}
             </TouchableOpacity>
 
             <Link href="/login" style={styles.link}>
@@ -241,7 +293,15 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: Colors.light.destructive,
-    marginTop: 10,
-    textAlign: "center",
+    alignSelf: "flex-start",
+    marginLeft: 5,
+    marginBottom: 5,
+  },
+  passwordRequirementContainer: {
+    flexDirection: "row",
+    width: "100%",
+    justifyContent: "space-between",
+    paddingHorizontal: 5,
+    marginBottom: 10,
   },
 });
