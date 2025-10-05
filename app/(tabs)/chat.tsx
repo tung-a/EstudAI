@@ -1,6 +1,8 @@
+import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { MaterialIcons } from "@expo/vector-icons";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { useState } from "react";
 import {
@@ -32,9 +34,10 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const colorScheme = useColorScheme() ?? "light";
+  const themeColors = Colors[colorScheme];
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.0-flash",
   });
 
   const generationConfig = {
@@ -83,6 +86,7 @@ export default function ChatScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
+        <ThemedText style={styles.headerTitle}>EstudAI Assistant</ThemedText>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.flex}
@@ -96,23 +100,20 @@ export default function ChatScreen() {
                 style={[
                   styles.messageContainer,
                   item.role === "user"
-                    ? styles.userMessageContainer
-                    : styles.modelMessageContainer,
-                  {
-                    backgroundColor:
-                      item.role === "user"
-                        ? Colors.light.tint
-                        : colorScheme === "dark"
-                        ? "#2c2c2e"
-                        : "#e5e5ea",
-                  },
+                    ? [
+                        styles.userMessageContainer,
+                        { backgroundColor: themeColors.accent },
+                      ]
+                    : [
+                        styles.modelMessageContainer,
+                        { backgroundColor: themeColors.card },
+                      ],
                 ]}
               >
                 <Text
                   style={{
                     fontSize: 16,
-                    color:
-                      item.role === "user" ? "white" : Colors[colorScheme].text,
+                    color: item.role === "user" ? "#FFFFFF" : themeColors.text,
                   }}
                 >
                   {item.parts[0].text}
@@ -124,8 +125,8 @@ export default function ChatScreen() {
             style={[
               styles.inputContainer,
               {
-                borderTopColor: Colors[colorScheme].icon,
-                backgroundColor: Colors[colorScheme].background,
+                borderTopColor: themeColors.icon,
+                backgroundColor: themeColors.background,
               },
             ]}
           >
@@ -133,26 +134,29 @@ export default function ChatScreen() {
               style={[
                 styles.input,
                 {
-                  backgroundColor: colorScheme === "dark" ? "#2c2c2e" : "#fff",
-                  borderColor: Colors[colorScheme].icon,
-                  color: Colors[colorScheme].text,
+                  backgroundColor: themeColors.card,
+                  borderColor: themeColors.icon,
+                  color: themeColors.text,
                 },
               ]}
               value={input}
               onChangeText={setInput}
-              placeholder="Digite sua mensagem..."
-              placeholderTextColor={Colors[colorScheme].icon}
+              placeholder="Digite sua dúvida..."
+              placeholderTextColor={themeColors.icon}
               editable={!loading}
             />
             <TouchableOpacity
               onPress={handleSendMessage}
-              style={styles.sendButton}
+              style={[
+                styles.sendButton,
+                { backgroundColor: themeColors.accent },
+              ]}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.sendButtonText}>Enviar</Text>
+                <MaterialIcons name="send" size={24} color="#fff" />
               )}
             </TouchableOpacity>
           </View>
@@ -163,11 +167,13 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    paddingVertical: 10,
   },
   messagesList: {
     paddingHorizontal: 10,
@@ -181,9 +187,11 @@ const styles = StyleSheet.create({
   },
   userMessageContainer: {
     alignSelf: "flex-end",
+    borderBottomRightRadius: 4,
   },
   modelMessageContainer: {
     alignSelf: "flex-start",
+    borderBottomLeftRadius: 4,
   },
   inputContainer: {
     flexDirection: "row",
@@ -199,18 +207,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginRight: 10,
     fontSize: 16,
-    paddingVertical: Platform.OS === "ios" ? 10 : 6,
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
   },
   sendButton: {
-    backgroundColor: "#007AFF",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
+    width: 44,
     height: 44,
     borderRadius: 22,
-  },
-  sendButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
   },
 });
