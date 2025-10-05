@@ -2,7 +2,7 @@ import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { router, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import React from "react";
 
 export default function TabLayout() {
@@ -26,20 +26,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="chat" // Adicione um arquivo `chat.tsx` vazio dentro de `(tabs)`
+        name="chat"
         options={{
           title: "Chat IA",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="t.bubble.fill" color={color} />
+            <IconSymbol size={28} name="paperplane.fill" color={color} />
           ),
-        }}
-        listeners={{
-          tabPress: (e) => {
-            // Previne a navegação padrão
-            e.preventDefault();
-            // Navega para a tela inicial do nosso layout de drawer
-            router.push("/(drawer)");
-          },
         }}
       />
       <Tabs.Screen
