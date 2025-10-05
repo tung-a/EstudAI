@@ -2,7 +2,6 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import Constants from "expo-constants";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -17,7 +16,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const API_KEY = Constants.expoConfig?.extra?.geminiApiKey;
+const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+if (!API_KEY) {
+  throw new Error("EXPO_PUBLIC_GEMINI_API_KEY is not defined");
+}
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 type ChatMessage = {
@@ -169,7 +171,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     paddingHorizontal: 10,
-    paddingTop: 10, // Adiciona um padding inicial no topo da lista
+    paddingTop: 10,
   },
   messageContainer: {
     padding: 12,
@@ -186,22 +188,26 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderTopWidth: 1,
   },
   input: {
     flex: 1,
-    height: 40,
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 15,
     marginRight: 10,
+    fontSize: 16,
+    paddingVertical: Platform.OS === "ios" ? 10 : 6,
   },
   sendButton: {
     backgroundColor: "#007AFF",
-    paddingVertical: 10,
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
-    borderRadius: 20,
+    height: 44,
+    borderRadius: 22,
   },
   sendButtonText: {
     color: "#fff",
