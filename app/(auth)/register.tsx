@@ -1,15 +1,12 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
-import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Link, router } from "expo-router";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { Link, useRouter } from "expo-router"; // Import useRouter
 import { useState } from "react";
 import {
-  ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -27,81 +24,52 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isEmailValid, setIsEmailValid] = useState(true);
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+  const router = useRouter();
 
   const validateEmail = (text: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    setIsEmailValid(emailRegex.test(text));
+    if (text === "") {
+      setIsEmailValid(true);
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      setIsEmailValid(emailRegex.test(text));
+    }
     setEmail(text);
   };
 
   const getPasswordStrength = () => {
-    if (password.length === 0) {
-      return { strength: "", color: "#d9534f" };
-    }
-    if (password.length < 6) {
-      return { strength: "Fraca", color: "#f0ad4e" };
-    }
-    if (password.length < 10) {
-      return { strength: "Média", color: "#5bc0de" };
-    }
+    if (password.length === 0) return { strength: "", color: "#d9534f" };
+    if (password.length < 6) return { strength: "Fraca", color: "#f0ad4e" };
+    if (password.length < 10) return { strength: "Média", color: "#5bc0de" };
     return { strength: "Forte", color: "#5cb85c" };
   };
 
-  const handleSignUp = async () => {
-    setError("");
+  const handleNavigateToWelcome = () => {
     if (!name || !email || !password || !confirmPassword) {
-      setError("Por favor, preencha todos os campos obrigatórios.");
+      Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios.");
       return;
     }
     if (!isEmailValid) {
-      setError("Por favor, insira um email válido.");
+      Alert.alert("Erro", "Por favor, insira um email válido.");
       return;
     }
     if (password !== confirmPassword) {
-      setError("As senhas não coincidem.");
+      Alert.alert("Erro", "As senhas não coincidem.");
       return;
     }
     if (password.length < 6) {
-      setError("A senha deve ter pelo menos 6 caracteres.");
+      Alert.alert("Erro", "A senha deve ter pelo menos 6 caracteres.");
       return;
     }
-
-    setLoading(true);
-
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const user = userCredential.user;
-
-      await updateProfile(user, { displayName: name });
-
-      await setDoc(doc(db, "users", user.uid), {
-        name: name,
-        email: user.email,
-      });
-
-      router.replace("/(auth)/welcome");
-    } catch (error: any) {
-      if (error.code === "auth/email-already-in-use") {
-        setError("Este email já está em uso.");
-      } else {
-        setError("Ocorreu um erro ao criar a conta.");
-      }
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+    router.push({
+      pathname: "/(auth)/welcome",
+      params: { name, email, password },
+    });
   };
 
   const passwordStrength = getPasswordStrength();
@@ -121,7 +89,6 @@ export default function RegisterScreen() {
             <ThemedText type="title" style={styles.title}>
               Crie sua Conta
             </ThemedText>
-
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
@@ -159,7 +126,6 @@ export default function RegisterScreen() {
             {!isEmailValid && email.length > 0 && (
               <Text style={styles.errorText}>Formato de email inválido.</Text>
             )}
-
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
@@ -190,7 +156,6 @@ export default function RegisterScreen() {
                 </Text>
               )}
             </View>
-
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
@@ -217,21 +182,12 @@ export default function RegisterScreen() {
                 />
               </TouchableOpacity>
             </View>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
             <TouchableOpacity
               style={[styles.button, { backgroundColor: themeColors.accent }]}
-              onPress={handleSignUp}
-              disabled={loading}
+              onPress={handleNavigateToWelcome}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Criar Conta</Text>
-              )}
+              <Text style={styles.buttonText}>Continuar</Text>
             </TouchableOpacity>
-
             <Link href="/login" style={styles.link}>
               <ThemedText type="link">
                 Já tem uma conta? Faça o login

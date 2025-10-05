@@ -3,8 +3,9 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { router } from "expo-router";
-import { doc, updateDoc } from "firebase/firestore";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -26,19 +27,53 @@ export default function WelcomeScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 
-  const handleContinue = async () => {
-    const user = auth.currentUser;
-    if (user) {
-      setLoading(true);
-      try {
-        await updateDoc(doc(db, "users", user.uid), {
-          age: age,
-          school: school,
-        });
-        router.replace("/(tabs)");
-      } catch (error: any) {
-        Alert.alert("Erro", "Não foi possível salvar os dados.", error);
-        setLoading(false);
+  const router = useRouter();
+  const { name, email, password } = useLocalSearchParams<{
+    name: string;
+    email: string;
+    password: string;
+  }>();
+
+  const handleCompleteRegistration = async () => {
+    if (!name || !email || !password) {
+      Alert.alert(
+        "Erro",
+        "Dados de registro não encontrados. Por favor, volte e tente novamente.",
+        [{ text: "Voltar", onPress: () => router.back() }]
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+
+      await updateProfile(user, { displayName: name });
+
+      await setDoc(doc(db, "users", user.uid), {
+        name: name,
+        email: user.email,
+        age: age || "",
+        school: school || "",
+      });
+    } catch (error: any) {
+      setLoading(false);
+      if (error.code === "auth/email-already-in-use") {
+        Alert.alert(
+          "Email em Uso",
+          "Este email já está cadastrado. Por favor, volte e tente fazer login ou use um email diferente.",
+          [{ text: "Voltar", onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert(
+          "Erro",
+          "Não foi possível criar sua conta: " + error.message
+        );
       }
     }
   };
@@ -90,19 +125,20 @@ export default function WelcomeScreen() {
 
             <TouchableOpacity
               style={[styles.button, { backgroundColor: themeColors.accent }]}
-              onPress={handleContinue}
+              onPress={handleCompleteRegistration}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Continuar</Text>
+                <Text style={styles.buttonText}>Concluir Cadastro</Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.button, styles.skipButton]}
-              onPress={() => router.replace("/(tabs)")}
+              onPress={handleCompleteRegistration}
+              disabled={loading}
             >
               <Text style={[styles.buttonText, { color: themeColors.accent }]}>
                 Pular

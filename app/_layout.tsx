@@ -4,48 +4,61 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged } from "firebase/auth";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "react-native-reanimated";
 
 import { auth } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
+SplashScreen.preventAutoHideAsync();
+
 export const unstable_settings = {
-  initialRouteName: "(auth)",
+  initialRouteName: "(auth)/login",
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [isLoggedIn, setLoggedIn] = useState(false);
   const router = useRouter();
+  const colorScheme = useColorScheme();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      // A lógica de redirecionamento permanece a mesma
-      if (!user) {
-        router.replace("/(auth)/login");
-      } else {
-        router.replace("/(tabs)");
-      }
+      setLoggedIn(!!user); // Define se o usuário está logado ou não
+      setAuthLoaded(true); // Marca que a verificação de auth foi concluída
     });
-
     return () => unsubscribe();
-  }, [router]);
+  }, []);
+
+  useEffect(() => {
+    if (!authLoaded) return;
+
+    if (isLoggedIn) {
+      router.replace("/(tabs)");
+    } else {
+      router.replace("/(auth)/login");
+    }
+  }, [authLoaded, isLoggedIn, router]);
+
+  useEffect(() => {
+    if (authLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [authLoaded]);
+
+  if (!authLoaded) {
+    return null;
+  }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="modal"
-          options={{
-            presentation: "modal",
-            headerShown: true,
-            title: "Modal",
-          }}
-        />
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
