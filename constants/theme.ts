@@ -1,46 +1,39 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
 import { Platform } from "react-native";
 
-const tintColorLight = "#0a7ea4";
-const tintColorDark = "#fff";
-const accentColor = "#E91E63"; // Cor de destaque rosa/magenta
+const accentColor = "#E91E63"; // Cor de destaque principal
+const destructiveColor = "#d9534f"; // Cor para ações de "perigo"
 
 export const Colors = {
   light: {
     text: "#11181C",
     background: "#fff",
-    tint: tintColorLight,
+    tint: accentColor, // Unificado com a cor de destaque
     icon: "#687076",
     tabIconDefault: "#687076",
-    tabIconSelected: tintColorLight,
-    card: "#f9f9f9", // Cor para os cartões no tema claro
+    tabIconSelected: accentColor,
+    card: "#f9f9f9",
     accent: accentColor,
+    destructive: destructiveColor,
   },
   dark: {
     text: "#ECEDEE",
     background: "#151718",
-    tint: tintColorDark,
+    tint: accentColor, // Unificado com a cor de destaque
     icon: "#9BA1A6",
     tabIconDefault: "#9BA1A6",
-    tabIconSelected: tintColorDark,
-    card: "#2c2c2e", // Cor para os cartões no tema escuro
+    tabIconSelected: accentColor,
+    card: "#2c2c2e",
     accent: accentColor,
+    destructive: destructiveColor,
   },
 };
 
+// ... (o restante do arquivo Fonts permanece o mesmo)
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: "system-ui",
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: "ui-serif",
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: "ui-rounded",
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: "ui-monospace",
   },
   default: {

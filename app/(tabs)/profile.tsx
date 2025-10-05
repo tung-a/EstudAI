@@ -1,17 +1,22 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { MaterialIcons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Button,
+  ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type UserProfile = {
   name: string;
@@ -23,6 +28,8 @@ type UserProfile = {
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const colorScheme = useColorScheme() ?? "light";
+  const themeColors = Colors[colorScheme];
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -56,60 +63,124 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <ThemedView style={styles.container}>
-        <ActivityIndicator size="large" />
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={themeColors.accent} />
       </ThemedView>
     );
   }
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Meu Perfil</ThemedText>
+      <SafeAreaView style={styles.flex}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.header}>
+            <View
+              style={[styles.avatar, { backgroundColor: themeColors.card }]}
+            >
+              <MaterialIcons name="person" size={60} color={themeColors.icon} />
+            </View>
+            <ThemedText type="title" style={styles.userName}>
+              {profile?.name}
+            </ThemedText>
+            <ThemedText style={styles.userEmail}>{profile?.email}</ThemedText>
+          </View>
 
-      {profile && (
-        <View style={styles.infoContainer}>
-          <Text style={styles.label}>Nome:</Text>
-          <Text style={styles.info}>{profile.name}</Text>
+          {profile && (
+            <ThemedView
+              lightColor={Colors.light.card}
+              darkColor={Colors.dark.card}
+              style={styles.infoCard}
+            >
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.label}>Idade:</ThemedText>
+                <ThemedText style={styles.info}>
+                  {profile.age || "Não informado"}
+                </ThemedText>
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.label}>Instituição:</ThemedText>
+                <ThemedText style={styles.info}>
+                  {profile.school || "Não informada"}
+                </ThemedText>
+              </View>
+            </ThemedView>
+          )}
 
-          <Text style={styles.label}>Email:</Text>
-          <Text style={styles.info}>{profile.email}</Text>
-
-          <Text style={styles.label}>Idade:</Text>
-          <Text style={styles.info}>{profile.age}</Text>
-
-          <Text style={styles.label}>Instituição de Ensino:</Text>
-          <Text style={styles.info}>{profile.school}</Text>
-        </View>
-      )}
-
-      <Button title="Sair (Logout)" onPress={handleLogout} color="red" />
+          <TouchableOpacity
+            style={[
+              styles.logoutButton,
+              { backgroundColor: themeColors.destructive },
+            ]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutButtonText}>Sair (Logout)</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  scrollContent: {
     padding: 20,
   },
-  infoContainer: {
-    width: "100%",
-    padding: 20,
-    marginVertical: 30,
-    backgroundColor: "#f2f2f2",
-    borderRadius: 10,
+  header: {
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  userName: {
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+  userEmail: {
+    fontSize: 16,
+    color: "gray",
+    marginTop: 4,
+  },
+  infoCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 30,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
   label: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginTop: 10,
+    opacity: 0.7,
   },
   info: {
-    fontSize: 18,
-    color: "#555",
-    marginBottom: 10,
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  logoutButton: {
+    padding: 15,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  logoutButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
