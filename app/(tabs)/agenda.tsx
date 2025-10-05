@@ -11,7 +11,7 @@ import {
   onSnapshot,
   query,
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -22,10 +22,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Calendar, LocaleConfig } from "react-native-calendars";
+import { Calendar, LocaleConfig, WeekCalendar } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Configuração para o idioma português (já existente)
+// Configuração do idioma
 LocaleConfig.locales["pt-br"] = {
   monthNames: [
     "Janeiro",
@@ -85,26 +85,28 @@ type MarkedDates = {
   };
 };
 
+type CalendarView = "month" | "week";
+
+const eventColors = ["#a29bfe", "#74b9ff", "#55efc4", "#ff7675"];
+
 export default function AgendaScreen() {
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const [selectedDate, setSelectedDate] = useState(today);
   const [events, setEvents] = useState<{ [date: string]: Event[] }>({});
   const [modalVisible, setModalVisible] = useState(false);
   const [eventTitle, setEventTitle] = useState("");
   const [eventTime, setEventTime] = useState("");
   const [loading, setLoading] = useState(true);
+  const [calendarView, setCalendarView] = useState<CalendarView>("month");
 
   const colorScheme = useColorScheme() ?? "light";
   const user = auth.currentUser;
 
-  // Carrega os eventos do Firestore
   useEffect(() => {
     if (!user) {
       setLoading(false);
       return;
     }
-
     const eventsCollection = collection(db, "users", user.uid, "events");
     const q = query(eventsCollection);
 
@@ -118,10 +120,20 @@ export default function AgendaScreen() {
         }
         userEvents[event.date].push(event);
       });
-      // Ordena os eventos por hora
+
+      // Ordena os eventos numericamente pelo horário
       for (const date in userEvents) {
-        userEvents[date].sort((a, b) => a.time.localeCompare(b.time));
+        userEvents[date].sort((a, b) => {
+          const [aHour, aMinute] = a.time.split(":").map(Number);
+          const [bHour, bMinute] = b.time.split(":").map(Number);
+
+          if (aHour !== bHour) {
+            return aHour - bHour;
+          }
+          return aMinute - bMinute;
+        });
       }
+
       setEvents(userEvents);
       setLoading(false);
     });
@@ -131,7 +143,6 @@ export default function AgendaScreen() {
 
   const handleAddEvent = async () => {
     if (!eventTitle || !eventTime || !user) return;
-
     try {
       await addDoc(collection(db, "users", user.uid, "events"), {
         title: eventTitle,
@@ -157,18 +168,16 @@ export default function AgendaScreen() {
 
   const markedDates: MarkedDates = {
     ...Object.keys(events).reduce<MarkedDates>((acc, date) => {
-      if (events[date].length > 0) {
-        acc[date] = { marked: true, dotColor: Colors.light.tint };
+      if (events[date] && events[date].length > 0) {
+        acc[date] = { marked: true, dotColor: Colors[colorScheme].accent };
       }
       return acc;
     }, {}),
     [selectedDate]: {
       selected: true,
-      selectedColor: Colors.light.tint,
-      // Mantém a bolinha se já houver um evento
-      ...(Object.keys(events).includes(selectedDate) &&
-      events[selectedDate].length > 0
-        ? { marked: true }
+      selectedColor: Colors[colorScheme].accent,
+      ...(events[selectedDate] && events[selectedDate].length > 0
+        ? { marked: true, dotColor: "white" }
         : {}),
     },
   };
@@ -176,53 +185,123 @@ export default function AgendaScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
-        <Calendar
-          onDayPress={(day) => setSelectedDate(day.dateString)}
-          markedDates={markedDates}
-          theme={{
-            backgroundColor: Colors[colorScheme].background,
-            calendarBackground: Colors[colorScheme].background,
-            textSectionTitleColor: "#b6c1cd",
-            selectedDayBackgroundColor: Colors.light.tint,
-            selectedDayTextColor: "#ffffff",
-            todayTextColor: Colors.light.tint,
-            dayTextColor: Colors[colorScheme].text,
-            textDisabledColor: "#d9e1e8",
-            dotColor: Colors.light.tint,
-            selectedDotColor: "#ffffff",
-            arrowColor: Colors.light.tint,
-            monthTextColor: Colors[colorScheme].text,
-            indicatorColor: "blue",
-            textDayFontWeight: "300",
-            textMonthFontWeight: "bold",
-            textDayHeaderFontWeight: "300",
-            textDayFontSize: 16,
-            textMonthFontSize: 16,
-            textDayHeaderFontSize: 16,
-          }}
-        />
+        <View style={styles.viewToggle}>
+          <TouchableOpacity onPress={() => setCalendarView("month")}>
+            <ThemedText
+              style={[
+                styles.toggleText,
+                calendarView === "month" && styles.activeToggle,
+              ]}
+            >
+              Mês
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setCalendarView("week")}>
+            <ThemedText
+              style={[
+                styles.toggleText,
+                calendarView === "week" && styles.activeToggle,
+              ]}
+            >
+              Semana
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+
+        {calendarView === "month" ? (
+          <Calendar
+            key="month"
+            onDayPress={(day) => setSelectedDate(day.dateString)}
+            markedDates={markedDates}
+            theme={{
+              backgroundColor: Colors[colorScheme].background,
+              calendarBackground: Colors[colorScheme].background,
+              textSectionTitleColor: "#b6c1cd",
+              selectedDayBackgroundColor: Colors[colorScheme].accent,
+              selectedDayTextColor: "#ffffff",
+              todayTextColor: Colors[colorScheme].accent,
+              dayTextColor: Colors[colorScheme].text,
+              textDisabledColor: "#d9e1e8",
+              dotColor: Colors[colorScheme].accent,
+              selectedDotColor: "#ffffff",
+              arrowColor: Colors[colorScheme].accent,
+              monthTextColor: Colors[colorScheme].text,
+              textDayFontWeight: "300",
+              textMonthFontWeight: "bold",
+              textDayHeaderFontWeight: "300",
+              textDayFontSize: 16,
+              textMonthFontSize: 16,
+              textDayHeaderFontSize: 16,
+            }}
+          />
+        ) : (
+          <WeekCalendar
+            key="week"
+            current={selectedDate}
+            onDayPress={(day) => setSelectedDate(day.dateString)}
+            markedDates={markedDates}
+            theme={{
+              backgroundColor: Colors[colorScheme].background,
+              calendarBackground: Colors[colorScheme].background,
+              textSectionTitleColor: "#b6c1cd",
+              selectedDayBackgroundColor: Colors[colorScheme].accent,
+              selectedDayTextColor: "#ffffff",
+              todayTextColor: Colors[colorScheme].accent,
+              dayTextColor: Colors[colorScheme].text,
+              textDisabledColor: "#d9e1e8",
+              dotColor: Colors[colorScheme].accent,
+              selectedDotColor: "#ffffff",
+              arrowColor: Colors[colorScheme].accent,
+              monthTextColor: Colors[colorScheme].text,
+              textDayFontWeight: "300",
+              textMonthFontWeight: "bold",
+              textDayHeaderFontWeight: "300",
+              textDayFontSize: 16,
+              textMonthFontSize: 16,
+              textDayHeaderFontSize: 16,
+            }}
+          />
+        )}
 
         <View style={styles.eventListContainer}>
           <ThemedText type="subtitle" style={styles.eventsHeader}>
-            Eventos para {selectedDate.split("-").reverse().join("/")}
+            {selectedDate === today
+              ? "Hoje"
+              : selectedDate.split("-").reverse().join("/")}
           </ThemedText>
           {loading ? (
-            <ActivityIndicator />
+            <ActivityIndicator style={{ marginTop: 20 }} />
           ) : (
             <FlatList
               data={events[selectedDate] || []}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <View style={styles.eventItem}>
-                  <ThemedText style={styles.eventTime}>{item.time}</ThemedText>
-                  <ThemedText style={styles.eventTitle}>
-                    {item.title}
-                  </ThemedText>
-                  <TouchableOpacity onPress={() => handleDeleteEvent(item.id)}>
-                    <Text style={styles.deleteButton}>X</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              renderItem={({ item, index }) => {
+                const cardColor = eventColors[index % eventColors.length];
+                return (
+                  <ThemedView
+                    lightColor={Colors.light.card}
+                    darkColor={Colors.dark.card}
+                    style={styles.eventItem}
+                  >
+                    <View
+                      style={[styles.colorBar, { backgroundColor: cardColor }]}
+                    />
+                    <View style={styles.eventDetails}>
+                      <ThemedText style={styles.eventTitle}>
+                        {item.title}
+                      </ThemedText>
+                      <ThemedText style={styles.eventTime}>
+                        {item.time}
+                      </ThemedText>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteEvent(item.id)}
+                    >
+                      <ThemedText style={styles.deleteButton}>✕</ThemedText>
+                    </TouchableOpacity>
+                  </ThemedView>
+                );
+              }}
               ListEmptyComponent={
                 <ThemedText style={styles.noEventsText}>
                   Nenhum evento para este dia.
@@ -233,7 +312,7 @@ export default function AgendaScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { backgroundColor: Colors[colorScheme].accent }]}
           onPress={() => setModalVisible(true)}
         >
           <Text style={styles.fabText}>+</Text>
@@ -279,7 +358,13 @@ export default function AgendaScreen() {
                 value={eventTime}
                 onChangeText={setEventTime}
               />
-              <TouchableOpacity style={styles.button} onPress={handleAddEvent}>
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  { backgroundColor: Colors[colorScheme].accent },
+                ]}
+                onPress={handleAddEvent}
+              >
                 <Text style={styles.buttonText}>Salvar</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -303,28 +388,60 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  viewToggle: {
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingVertical: 10,
+    gap: 20,
+  },
+  toggleText: {
+    padding: 8,
+    fontSize: 16,
+    opacity: 0.6,
+  },
+  activeToggle: {
+    fontWeight: "bold",
+    opacity: 1,
+    borderBottomWidth: 2,
+    borderBottomColor: Colors.light.accent,
+  },
   eventListContainer: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   eventsHeader: {
-    marginBottom: 10,
+    marginBottom: 15,
   },
   eventItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderRadius: 10,
+    marginVertical: 5, // Reduzido de 6 para 5
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
   },
-  eventTime: {
-    fontWeight: "bold",
-    marginRight: 15,
-    width: 50,
+  colorBar: {
+    width: 6,
+    height: "100%",
+  },
+  eventDetails: {
+    flex: 1,
+    paddingVertical: 12, // Reduzido de 15 para 12
+    paddingHorizontal: 12, // Reduzido de 15 para 12
   },
   eventTitle: {
-    fontSize: 16,
-    flex: 1,
+    fontWeight: "600",
+    fontSize: 15, // Reduzido de 16 para 15
+  },
+  eventTime: {
+    fontSize: 13, // Reduzido de 14 para 13
+    opacity: 0.7,
+    marginTop: 2, // Reduzido de 4 para 2
   },
   noEventsText: {
     textAlign: "center",
@@ -332,15 +449,14 @@ const styles = StyleSheet.create({
     color: "gray",
   },
   deleteButton: {
-    color: "red",
-    fontSize: 18,
-    marginLeft: 10,
+    fontSize: 22,
+    padding: 10,
+    opacity: 0.6,
   },
   fab: {
     position: "absolute",
     right: 30,
     bottom: 30,
-    backgroundColor: Colors.light.tint,
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -352,6 +468,7 @@ const styles = StyleSheet.create({
   fabText: {
     fontSize: 30,
     color: "white",
+    lineHeight: 30,
   },
   modalContainer: {
     flex: 1,
@@ -375,7 +492,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#007AFF",
     padding: 15,
     borderRadius: 8,
     width: "100%",
