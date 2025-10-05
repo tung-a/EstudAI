@@ -23,6 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function WelcomeScreen() {
   const [age, setAge] = useState("");
   const [school, setSchool] = useState("");
+  const [goal, setGoal] = useState("");
   const [loading, setLoading] = useState(false);
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
@@ -60,13 +61,14 @@ export default function WelcomeScreen() {
         email: user.email,
         age: age || "",
         school: school || "",
+        goal: goal || "",
       });
     } catch (error: any) {
       setLoading(false);
       if (error.code === "auth/email-already-in-use") {
         Alert.alert(
           "Email em Uso",
-          "Este email já está cadastrado. Por favor, volte e tente fazer login ou use um email diferente.",
+          "Este email já está cadastrado. Por favor, volte e tente fazer login.",
           [{ text: "Voltar", onPress: () => router.back() }]
         );
       } else {
@@ -121,6 +123,20 @@ export default function WelcomeScreen() {
               placeholderTextColor={themeColors.icon}
               value={school}
               onChangeText={setSchool}
+            />
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  color: themeColors.text,
+                  borderColor: themeColors.icon,
+                  backgroundColor: themeColors.card,
+                },
+              ]}
+              placeholder="Qual seu objetivo? (Ex: ENEM, FUVEST)"
+              placeholderTextColor={themeColors.icon}
+              value={goal}
+              onChangeText={setGoal}
             />
 
             <TouchableOpacity

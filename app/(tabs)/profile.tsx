@@ -18,11 +18,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// Tipo de perfil atualizado
 type UserProfile = {
   name: string;
   email: string;
   age?: string;
   school?: string;
+  goal?: string; // Novo campo
 };
 
 export default function ProfileScreen() {
@@ -41,6 +43,7 @@ export default function ProfileScreen() {
         if (docSnap.exists()) {
           setProfile(docSnap.data() as UserProfile);
         } else {
+          // Fallback caso não encontre o documento no Firestore
           setProfile({
             name: user.displayName || "Usuário",
             email: user.email || "",
@@ -91,13 +94,21 @@ export default function ProfileScreen() {
               darkColor={Colors.dark.card}
               style={styles.infoCard}
             >
+              {/* CAMPO OBJETIVO ADICIONADO */}
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.label}>Objetivo:</ThemedText>
+                <ThemedText style={styles.info}>
+                  {profile.goal || "Não informado"}
+                </ThemedText>
+              </View>
               <View style={styles.infoRow}>
                 <ThemedText style={styles.label}>Idade:</ThemedText>
                 <ThemedText style={styles.info}>
                   {profile.age || "Não informado"}
                 </ThemedText>
               </View>
-              <View style={styles.infoRow}>
+              {/* Removida a borda do último item para melhor estética */}
+              <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
                 <ThemedText style={styles.label}>Instituição:</ThemedText>
                 <ThemedText style={styles.info}>
                   {profile.school || "Não informada"}
