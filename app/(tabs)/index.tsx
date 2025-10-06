@@ -43,7 +43,12 @@ export default function HomeScreen() {
   // Efeito para buscar os eventos do dia do Firestore
   useEffect(() => {
     if (user) {
-      const todayString = new Date().toISOString().split("T")[0];
+      const today = new Date();
+      const todayString = new Date(
+        today.getTime() - today.getTimezoneOffset() * 60000
+      )
+        .toISOString()
+        .split("T")[0];
       const eventsQuery = query(
         collection(db, "users", user.uid, "events"),
         where("date", "==", todayString)
