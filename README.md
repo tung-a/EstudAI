@@ -16,6 +16,10 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+### Configure Firebase environment variables
+
+Copy `.env.example` to `.env` (or update your `app.config.*`) and preencha cada chave `EXPO_PUBLIC_FIREBASE_*` com os valores reais do seu projeto no Firebase Console. O app lança um erro explicativo caso alguma variável esteja ausente, evitando o erro genérico `auth/invalid-api-key`.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
