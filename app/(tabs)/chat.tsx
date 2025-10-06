@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+// IMPORT ADICIONADO
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
@@ -37,7 +38,7 @@ export default function ChatScreen() {
   const themeColors = Colors[colorScheme];
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.0-pro",
   });
 
   const generationConfig = {
@@ -85,7 +86,7 @@ export default function ChatScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.flex}>
+      <SafeAreaView style={styles.flex} edges={["top", "left", "right"]}>
         <ThemedText style={styles.headerTitle}>EstudAI Assistant</ThemedText>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}

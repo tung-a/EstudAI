@@ -22,7 +22,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Calendar, LocaleConfig, WeekCalendar } from "react-native-calendars";
+import {
+  Calendar,
+  CalendarProvider,
+  LocaleConfig,
+  WeekCalendar,
+} from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Configuração do idioma
@@ -69,24 +74,17 @@ LocaleConfig.locales["pt-br"] = {
 };
 LocaleConfig.defaultLocale = "pt-br";
 
-type Event = {
-  id: string;
-  title: string;
-  time: string;
-  date: string;
-};
-
+type Event = { id: string; title: string; time: string; date: string };
 type MarkedDates = {
   [date: string]: {
     marked?: boolean;
     dotColor?: string;
     selected?: boolean;
     selectedColor?: string;
+    selectedTextColor?: string;
   };
 };
-
 type CalendarView = "month" | "week";
-
 const eventColors = ["#a29bfe", "#74b9ff", "#55efc4", "#ff7675"];
 
 export default function AgendaScreen() {
@@ -107,9 +105,7 @@ export default function AgendaScreen() {
       setLoading(false);
       return;
     }
-    const eventsCollection = collection(db, "users", user.uid, "events");
-    const q = query(eventsCollection);
-
+    const q = query(collection(db, "users", user.uid, "events"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const userEvents: { [date: string]: Event[] } = {};
       snapshot.forEach((doc) => {
@@ -120,24 +116,17 @@ export default function AgendaScreen() {
         }
         userEvents[event.date].push(event);
       });
-
-      // Ordena os eventos numericamente pelo horário
       for (const date in userEvents) {
         userEvents[date].sort((a, b) => {
           const [aHour, aMinute] = a.time.split(":").map(Number);
           const [bHour, bMinute] = b.time.split(":").map(Number);
-
-          if (aHour !== bHour) {
-            return aHour - bHour;
-          }
+          if (aHour !== bHour) return aHour - bHour;
           return aMinute - bMinute;
         });
       }
-
       setEvents(userEvents);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, [user]);
 
@@ -166,115 +155,123 @@ export default function AgendaScreen() {
     }
   };
 
-  const markedDates: MarkedDates = {
-    ...Object.keys(events).reduce<MarkedDates>((acc, date) => {
-      if (events[date] && events[date].length > 0) {
-        acc[date] = { marked: true, dotColor: Colors[colorScheme].accent };
+  const markedDates = useMemo(() => {
+    const marks: MarkedDates = {};
+    // Aplica o ponto para dias com eventos
+    Object.keys(events).forEach((date) => {
+      if (events[date]?.length > 0) {
+        marks[date] = {
+          ...marks[date],
+          marked: true,
+          dotColor: Colors[colorScheme].accent,
+        };
       }
-      return acc;
-    }, {}),
-    [selectedDate]: {
+    });
+
+    // Aplica o estilo de dia selecionado (círculo suave)
+    marks[selectedDate] = {
+      ...marks[selectedDate],
+      selected: true,
+      selectedColor: `${Colors[colorScheme].accent}80`, // Cor com 50% de opacidade
+      selectedTextColor: colorScheme === "dark" ? "#FFFFFF" : "#000000",
+    };
+
+    // Aplica o estilo de HOJE (círculo sólido), que sobrescreve o de selecionado se for o mesmo dia
+    marks[today] = {
+      ...marks[today],
       selected: true,
       selectedColor: Colors[colorScheme].accent,
-      ...(events[selectedDate] && events[selectedDate].length > 0
-        ? { marked: true, dotColor: "white" }
-        : {}),
-    },
+      selectedTextColor: "#FFFFFF",
+    };
+
+    return marks;
+  }, [events, selectedDate, today, colorScheme]);
+
+  const calendarTheme = {
+    backgroundColor: "transparent",
+    calendarBackground: "transparent",
+    textSectionTitleColor: colorScheme === "dark" ? "#9BA1A6" : "#687076",
+    // Cor para Sábado e Domingo
+    textSectionTitleDisabledColor: Colors.light.destructive,
+    selectedDayTextColor: "#FFFFFF",
+    dayTextColor: Colors[colorScheme].text,
+    textDisabledColor: colorScheme === "dark" ? "#555" : "#d9e1e8",
+    dotColor: Colors[colorScheme].accent,
+    selectedDotColor: "#FFFFFF",
+    arrowColor: Colors[colorScheme].accent,
+    monthTextColor: Colors[colorScheme].text,
+    textDayFontWeight: "300" as const,
+    textMonthFontWeight: "bold" as const,
+    textDayHeaderFontWeight: "300" as const,
+    textDayFontSize: 16,
+    textMonthFontSize: 16,
+    textDayHeaderFontSize: 16,
+  };
+
+  const getHeaderTitle = () => {
+    if (!selectedDate) return "Eventos";
+    if (selectedDate === today) return "Eventos de Hoje";
+    const date = new Date(selectedDate + "T12:00:00Z");
+    return `Eventos de ${
+      LocaleConfig.locales["pt-br"].dayNames[date.getDay()]
+    }`;
   };
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.flex}>
-        <View style={styles.viewToggle}>
-          <TouchableOpacity onPress={() => setCalendarView("month")}>
-            <ThemedText
-              style={[
-                styles.toggleText,
-                calendarView === "month" && styles.activeToggle,
-              ]}
-            >
-              Mês
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setCalendarView("week")}>
-            <ThemedText
-              style={[
-                styles.toggleText,
-                calendarView === "week" && styles.activeToggle,
-              ]}
-            >
-              Semana
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        {calendarView === "month" ? (
-          <Calendar
-            key="month"
-            onDayPress={(day) => setSelectedDate(day.dateString)}
-            markedDates={markedDates}
-            theme={{
-              backgroundColor: Colors[colorScheme].background,
-              calendarBackground: Colors[colorScheme].background,
-              textSectionTitleColor: "#b6c1cd",
-              selectedDayBackgroundColor: Colors[colorScheme].accent,
-              selectedDayTextColor: "#ffffff",
-              todayTextColor: Colors[colorScheme].accent,
-              dayTextColor: Colors[colorScheme].text,
-              textDisabledColor: "#d9e1e8",
-              dotColor: Colors[colorScheme].accent,
-              selectedDotColor: "#ffffff",
-              arrowColor: Colors[colorScheme].accent,
-              monthTextColor: Colors[colorScheme].text,
-              textDayFontWeight: "300",
-              textMonthFontWeight: "bold",
-              textDayHeaderFontWeight: "300",
-              textDayFontSize: 16,
-              textMonthFontSize: 16,
-              textDayHeaderFontSize: 16,
-            }}
-          />
-        ) : (
-          <WeekCalendar
-            key="week"
-            current={selectedDate}
-            onDayPress={(day) => setSelectedDate(day.dateString)}
-            markedDates={markedDates}
-            theme={{
-              backgroundColor: Colors[colorScheme].background,
-              calendarBackground: Colors[colorScheme].background,
-              textSectionTitleColor: "#b6c1cd",
-              selectedDayBackgroundColor: Colors[colorScheme].accent,
-              selectedDayTextColor: "#ffffff",
-              todayTextColor: Colors[colorScheme].accent,
-              dayTextColor: Colors[colorScheme].text,
-              textDisabledColor: "#d9e1e8",
-              dotColor: Colors[colorScheme].accent,
-              selectedDotColor: "#ffffff",
-              arrowColor: Colors[colorScheme].accent,
-              monthTextColor: Colors[colorScheme].text,
-              textDayFontWeight: "300",
-              textMonthFontWeight: "bold",
-              textDayHeaderFontWeight: "300",
-              textDayFontSize: 16,
-              textMonthFontSize: 16,
-              textDayHeaderFontSize: 16,
-            }}
-          />
-        )}
-
-        <View style={styles.eventListContainer}>
-          <ThemedText type="subtitle" style={styles.eventsHeader}>
-            {selectedDate === today
-              ? "Hoje"
-              : selectedDate.split("-").reverse().join("/")}
-          </ThemedText>
+      <SafeAreaView style={styles.flex} edges={["top", "left", "right"]}>
+        <CalendarProvider date={selectedDate} onDateChanged={setSelectedDate}>
+          <View style={styles.viewToggle}>
+            <TouchableOpacity onPress={() => setCalendarView("month")}>
+              <ThemedText
+                style={[
+                  styles.toggleText,
+                  calendarView === "month" && styles.activeToggle,
+                ]}
+              >
+                Mês
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setCalendarView("week")}>
+              <ThemedText
+                style={[
+                  styles.toggleText,
+                  calendarView === "week" && styles.activeToggle,
+                ]}
+              >
+                Semana
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+          {calendarView === "month" ? (
+            <Calendar
+              key="month"
+              markedDates={markedDates}
+              theme={calendarTheme}
+            />
+          ) : (
+            <WeekCalendar
+              key="week"
+              markedDates={markedDates}
+              theme={calendarTheme}
+            />
+          )}
           {loading ? (
-            <ActivityIndicator style={{ marginTop: 20 }} />
+            <ActivityIndicator
+              style={{ flex: 1 }}
+              color={Colors[colorScheme].accent}
+            />
           ) : (
             <FlatList
+              style={styles.list}
               data={events[selectedDate] || []}
               keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContentContainer}
+              ListHeaderComponent={
+                <ThemedText type="subtitle" style={styles.eventsHeader}>
+                  {getHeaderTitle()}
+                </ThemedText>
+              }
               renderItem={({ item, index }) => {
                 const cardColor = eventColors[index % eventColors.length];
                 return (
@@ -309,90 +306,90 @@ export default function AgendaScreen() {
               }
             />
           )}
-        </View>
 
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: Colors[colorScheme].accent }]}
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.fab,
+              { backgroundColor: Colors[colorScheme].accent },
+            ]}
+            onPress={() => setModalVisible(true)}
+          >
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
 
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <View
-              style={[
-                styles.modalContent,
-                { backgroundColor: Colors[colorScheme].background },
-              ]}
-            >
-              <ThemedText type="subtitle">Adicionar Evento</ThemedText>
-              <TextInput
-                placeholder="Título do Evento"
+          <Modal
+            animationType="slide"
+            transparent
+            visible={modalVisible}
+            onRequestClose={() => setModalVisible(false)}
+          >
+            <View style={styles.modalContainer}>
+              <View
                 style={[
-                  styles.input,
-                  {
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].icon,
-                  },
+                  styles.modalContent,
+                  { backgroundColor: Colors[colorScheme].background },
                 ]}
-                placeholderTextColor={Colors[colorScheme].icon}
-                value={eventTitle}
-                onChangeText={setEventTitle}
-              />
-              <TextInput
-                placeholder="Horário (ex: 14:00)"
-                style={[
-                  styles.input,
-                  {
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].icon,
-                  },
-                ]}
-                placeholderTextColor={Colors[colorScheme].icon}
-                value={eventTime}
-                onChangeText={setEventTime}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  { backgroundColor: Colors[colorScheme].accent },
-                ]}
-                onPress={handleAddEvent}
               >
-                <Text style={styles.buttonText}>Salvar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>Cancelar</Text>
-              </TouchableOpacity>
+                <ThemedText type="subtitle">Adicionar Evento</ThemedText>
+                <TextInput
+                  placeholder="Título do Evento"
+                  style={[
+                    styles.input,
+                    {
+                      color: Colors[colorScheme].text,
+                      borderColor: Colors[colorScheme].icon,
+                    },
+                  ]}
+                  placeholderTextColor={Colors[colorScheme].icon}
+                  value={eventTitle}
+                  onChangeText={setEventTitle}
+                />
+                <TextInput
+                  placeholder="Horário (ex: 14:00)"
+                  style={[
+                    styles.input,
+                    {
+                      color: Colors[colorScheme].text,
+                      borderColor: Colors[colorScheme].icon,
+                    },
+                  ]}
+                  placeholderTextColor={Colors[colorScheme].icon}
+                  value={eventTime}
+                  onChangeText={setEventTime}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    { backgroundColor: Colors[colorScheme].accent },
+                  ]}
+                  onPress={handleAddEvent}
+                >
+                  <Text style={styles.buttonText}>Salvar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
+        </CalendarProvider>
       </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  flex: { flex: 1 },
   viewToggle: {
     flexDirection: "row",
     justifyContent: "center",
     paddingVertical: 10,
     gap: 20,
+    paddingHorizontal: 20,
   },
   toggleText: {
     padding: 8,
@@ -405,19 +402,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: Colors.light.accent,
   },
-  eventListContainer: {
-    flex: 1,
+  list: {
+    flex: 1, // Faz a lista ocupar o espaço restante
+    marginTop: 24, // Adiciona o espaço que foi removido
+  },
+  listContentContainer: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingBottom: 100, // Espaço para o FAB
   },
   eventsHeader: {
-    marginBottom: 15,
+    marginBottom: 10,
   },
   eventItem: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 10,
-    marginVertical: 5, // Reduzido de 6 para 5
+    marginVertical: 5,
     overflow: "hidden",
     elevation: 2,
     shadowColor: "#000",
@@ -425,34 +425,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
   },
-  colorBar: {
-    width: 6,
-    height: "100%",
-  },
-  eventDetails: {
-    flex: 1,
-    paddingVertical: 12, // Reduzido de 15 para 12
-    paddingHorizontal: 12, // Reduzido de 15 para 12
-  },
-  eventTitle: {
-    fontWeight: "600",
-    fontSize: 15, // Reduzido de 16 para 15
-  },
-  eventTime: {
-    fontSize: 13, // Reduzido de 14 para 13
-    opacity: 0.7,
-    marginTop: 2, // Reduzido de 4 para 2
-  },
-  noEventsText: {
-    textAlign: "center",
-    marginTop: 20,
-    color: "gray",
-  },
-  deleteButton: {
-    fontSize: 22,
-    padding: 10,
-    opacity: 0.6,
-  },
+  colorBar: { width: 6, height: "100%" },
+  eventDetails: { flex: 1, paddingVertical: 12, paddingHorizontal: 12 },
+  eventTitle: { fontWeight: "600", fontSize: 15 },
+  eventTime: { fontSize: 13, opacity: 0.7, marginTop: 2 },
+  noEventsText: { textAlign: "center", marginTop: 20, color: "gray" },
+  deleteButton: { fontSize: 22, padding: 10, opacity: 0.6 },
   fab: {
     position: "absolute",
     right: 30,
@@ -465,11 +443,7 @@ const styles = StyleSheet.create({
     elevation: 8,
     zIndex: 10,
   },
-  fabText: {
-    fontSize: 30,
-    color: "white",
-    lineHeight: 30,
-  },
+  fabText: { fontSize: 30, color: "white", lineHeight: 30 },
   modalContainer: {
     flex: 1,
     justifyContent: "center",
@@ -498,12 +472,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  cancelButton: {
-    backgroundColor: "gray",
-  },
+  buttonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
+  cancelButton: { backgroundColor: "gray" },
 });
