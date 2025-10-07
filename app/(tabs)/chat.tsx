@@ -71,7 +71,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 

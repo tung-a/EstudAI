@@ -19,6 +19,7 @@ const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
 const storageBucket = process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET;
 const messagingSenderId = process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
 const appId = process.env.EXPO_PUBLIC_FIREBASE_APP_ID;
+const measurementId = process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID;
 
 const missingEnvVars = [
   ["EXPO_PUBLIC_FIREBASE_API_KEY", apiKey],
@@ -27,6 +28,7 @@ const missingEnvVars = [
   ["EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET", storageBucket],
   ["EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", messagingSenderId],
   ["EXPO_PUBLIC_FIREBASE_APP_ID", appId],
+  ["EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID", measurementId],
 ].filter(([, value]) => !value);
 
 if (missingEnvVars.length > 0) {
@@ -44,6 +46,7 @@ const firebaseConfig = {
   storageBucket: storageBucket as string,
   messagingSenderId: messagingSenderId as string,
   appId: appId as string,
+  measurementId: measurementId as string,
 };
 
 // Initialize Firebase
