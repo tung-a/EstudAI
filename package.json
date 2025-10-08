@@ -3,12 +3,12 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "doppler run -- npx expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
+    "android": "doppler run -- npx expo start --android",
+    "ios": "doppler run -- npx expo start --ios",
+    "web": "doppler run -- npx expo start --web",
+    "lint": "npx expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@types/react-native": "^0.72.8",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
