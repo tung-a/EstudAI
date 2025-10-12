@@ -3,6 +3,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { logSignUp } from "@/lib/analytics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -63,6 +64,8 @@ export default function WelcomeScreen() {
         school: school || "",
         goal: goal || "",
       });
+
+      logSignUp();
     } catch (error: any) {
       setLoading(false);
       if (error.code === "auth/email-already-in-use") {

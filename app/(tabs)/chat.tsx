@@ -2,6 +2,11 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  logAddConversation,
+  logDeleteConversation,
+  logSendMessage,
+} from "@/lib/analytics";
 import { MaterialIcons } from "@expo/vector-icons";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -179,6 +184,7 @@ export default function ChatScreen() {
     setConversationCounter((prev) => prev + 1);
     setSuggestedQuestions([]);
     setInput("");
+    logAddConversation();
   };
 
   const handleDeleteConversation = (conversationId: string) => {
@@ -202,6 +208,7 @@ export default function ChatScreen() {
       return updated;
     });
 
+    logDeleteConversation();
     setSuggestedQuestions([]);
     setInput("");
   };
@@ -441,6 +448,7 @@ Resposta do assistente: "${answer}".`,
     setLoading(true);
     setInput("");
     setSuggestedQuestions([]);
+    logSendMessage();
 
     try {
       const chatSession = model.startChat({
