@@ -5,7 +5,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Tabs } from "expo-router";
 import React from "react";
 
-export default function TabLayout() {
+export default function UserTabLayout() {
   const colorScheme = useColorScheme();
 
   return (
@@ -49,15 +49,6 @@ export default function TabLayout() {
           title: "Perfil",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="person.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Dashboard",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="chart.bar.fill" color={color} />
           ),
         }}
       />

@@ -63,6 +63,7 @@ export default function WelcomeScreen() {
         age: age || "",
         school: school || "",
         goal: goal || "",
+        role: "user",
       });
 
       logSignUp();
