@@ -3,6 +3,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { logLogin } from "@/lib/analytics";
 import { MaterialIcons } from "@expo/vector-icons";
 import { Link } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -54,6 +55,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      logLogin();
       // O redirecionamento será tratado pelo _layout principal
     } catch (error: any) {
       if (error.code === "auth/invalid-credential") {

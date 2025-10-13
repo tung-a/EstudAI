@@ -123,7 +123,7 @@ export default function HomeScreen() {
             <ThemedText type="subtitle">Ações Rápidas</ThemedText>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push("/(tabs)/chat")}
+              onPress={() => router.push("/(user)/chat")}
             >
               <ThemedText
                 style={{ color: Colors.light.tint, fontWeight: "bold" }}
@@ -133,7 +133,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push("/(tabs)/agenda")}
+              onPress={() => router.push("/(user)/agenda")}
             >
               <ThemedText
                 style={{ color: Colors.light.tint, fontWeight: "bold" }}

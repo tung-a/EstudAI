@@ -22,6 +22,9 @@ const MAPPING = {
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
   "person.fill": "person",
+  calendar: "event",
+  "chart.bar.fill": "bar-chart",
+  "person.3.fill": "people",
 } as IconMapping;
 
 /**

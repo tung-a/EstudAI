@@ -3,6 +3,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { logAddEventCalendar, logDeleteEventCalendar } from "@/lib/analytics";
 import {
   addDoc,
   collection,
@@ -14,6 +15,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   StyleSheet,
@@ -141,12 +143,23 @@ export default function AgendaScreen() {
 
   const handleAddEvent = async () => {
     if (!eventTitle || !eventTime || !user) return;
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(eventTime)) {
+      Alert.alert(
+        "Formato de Hora Inválido",
+        "Por favor, insira a hora no formato HH:MM (ex: 14:30)."
+      );
+      return;
+    }
+
     try {
       await addDoc(collection(db, "users", user.uid, "events"), {
         title: eventTitle,
         time: eventTime,
         date: selectedDate,
       });
+      logAddEventCalendar();
       setEventTitle("");
       setEventTime("");
       setModalVisible(false);
@@ -159,6 +172,7 @@ export default function AgendaScreen() {
     if (!user) return;
     try {
       await deleteDoc(doc(db, "users", user.uid, "events", eventId));
+      logDeleteEventCalendar();
     } catch (error) {
       console.error("Erro ao deletar evento: ", error);
     }
