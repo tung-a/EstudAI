@@ -85,7 +85,7 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <ThemedText type="title">Olá, {userName}!</ThemedText>
             <ThemedText style={styles.headerSubtitle}>
-              Pronto para vencer nos estudos? 🚀 💥
+              Continue com o bom trabalho!! 🫡🫡
             </ThemedText>
           </View>
 
@@ -123,12 +123,12 @@ export default function HomeScreen() {
             <ThemedText type="subtitle">Ações Rápidas</ThemedText>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push("/(user)/chat")}
+              onPress={() => router.push("/(admin)/users")}
             >
               <ThemedText
                 style={{ color: Colors.light.tint, fontWeight: "bold" }}
               >
-                Tirar dúvida com a IA
+                Gerencie os usuários
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
