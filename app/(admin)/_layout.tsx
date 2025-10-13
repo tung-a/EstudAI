@@ -17,24 +17,6 @@ export default function AdminTabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="house.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="agenda"
-        options={{
-          title: "Agenda",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="calendar" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="dashboard"
         options={{
           title: "Dashboard",
