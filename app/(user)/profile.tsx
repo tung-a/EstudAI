@@ -25,6 +25,7 @@ type UserProfile = {
   age?: string;
   school?: string;
   goal?: string;
+  timezone?: string; // Adicionado
 };
 
 export default function ProfileScreen() {
@@ -37,6 +38,7 @@ export default function ProfileScreen() {
   const [editableAge, setEditableAge] = useState("");
   const [editableSchool, setEditableSchool] = useState("");
   const [editableGoal, setEditableGoal] = useState("");
+  const [editableTimezone, setEditableTimezone] = useState("America/Sao_Paulo"); // Adicionado
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
@@ -51,14 +53,15 @@ export default function ProfileScreen() {
         if (docSnap.exists()) {
           const data = docSnap.data() as UserProfile;
           setProfile(data);
-          // Inicializa os campos editáveis com os dados do perfil
           setEditableAge(data.age || "");
           setEditableSchool(data.school || "");
           setEditableGoal(data.goal || "");
+          setEditableTimezone(data.timezone || "America/Sao_Paulo"); // Adicionado
         } else {
           setProfile({
             name: user.displayName || "Usuário",
             email: user.email || "",
+            timezone: "America/Sao_Paulo",
           });
         }
       }
@@ -87,15 +90,16 @@ export default function ProfileScreen() {
         age: editableAge,
         school: editableSchool,
         goal: editableGoal,
+        timezone: editableTimezone, // Adicionado
       });
-      // Atualiza o estado local do perfil após salvar
       setProfile((prevProfile) => ({
         ...prevProfile!,
         age: editableAge,
         school: editableSchool,
         goal: editableGoal,
+        timezone: editableTimezone, // Adicionado
       }));
-      setIsEditing(false); // Sai do modo de edição
+      setIsEditing(false);
       Alert.alert("Sucesso", "Perfil atualizado!");
     } catch (error: any) {
       Alert.alert("Erro", "Não foi possível salvar as alterações.", error);
@@ -149,6 +153,7 @@ export default function ProfileScreen() {
 
               {isEditing ? (
                 <>
+                  {/* Campos de edição existentes... */}
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.label}>Objetivo:</ThemedText>
                     <TextInput
@@ -170,7 +175,7 @@ export default function ProfileScreen() {
                       keyboardType="numeric"
                     />
                   </View>
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                  <View style={styles.infoRow}>
                     <ThemedText style={styles.label}>Instituição:</ThemedText>
                     <TextInput
                       style={[styles.input, { color: themeColors.text }]}
@@ -180,6 +185,19 @@ export default function ProfileScreen() {
                       placeholderTextColor={themeColors.icon}
                     />
                   </View>
+                  {/* NOVO CAMPO DE FUSO HORÁRIO */}
+                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={styles.label}>Fuso Horário:</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: themeColors.text }]}
+                      value={editableTimezone}
+                      onChangeText={setEditableTimezone}
+                      placeholder="Ex: America/Sao_Paulo"
+                      placeholderTextColor={themeColors.icon}
+                      autoCapitalize="none"
+                    />
+                  </View>
+
                   <View style={styles.editButtonsContainer}>
                     <TouchableOpacity
                       style={styles.cancelButton}
@@ -206,6 +224,7 @@ export default function ProfileScreen() {
                 </>
               ) : (
                 <>
+                  {/* Campos de visualização existentes... */}
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.label}>Objetivo:</ThemedText>
                     <ThemedText style={styles.info}>
@@ -218,10 +237,17 @@ export default function ProfileScreen() {
                       {profile.age || "Não informado"}
                     </ThemedText>
                   </View>
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                  <View style={styles.infoRow}>
                     <ThemedText style={styles.label}>Instituição:</ThemedText>
                     <ThemedText style={styles.info}>
                       {profile.school || "Não informada"}
+                    </ThemedText>
+                  </View>
+                  {/* NOVO CAMPO DE FUSO HORÁRIO */}
+                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={styles.label}>Fuso Horário:</ThemedText>
+                    <ThemedText style={styles.info}>
+                      {profile.timezone || "Não informado"}
                     </ThemedText>
                   </View>
                 </>
@@ -247,18 +273,9 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  scrollContent: { padding: 20 },
+  header: { alignItems: "center", marginBottom: 30 },
   avatar: {
     width: 100,
     height: 100,
@@ -267,20 +284,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  userName: {
-    fontSize: 28,
-    fontWeight: "bold",
-  },
-  userEmail: {
-    fontSize: 16,
-    color: "gray",
-    marginTop: 4,
-  },
-  infoCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 30,
-  },
+  userName: { fontSize: 28, fontWeight: "bold" },
+  userEmail: { fontSize: 16, color: "gray", marginTop: 4 },
+  infoCard: { borderRadius: 12, padding: 16, marginBottom: 30 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -295,23 +301,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
-  label: {
-    fontSize: 16,
-    opacity: 0.7,
-    flex: 1,
-  },
-  info: {
-    fontSize: 16,
-    fontWeight: "500",
-    flex: 2,
-    textAlign: "right",
-  },
+  label: { fontSize: 16, opacity: 0.7, flex: 1 },
+  info: { fontSize: 16, fontWeight: "500", flex: 2, textAlign: "right" },
   input: {
     fontSize: 16,
     fontWeight: "500",
     flex: 2,
     textAlign: "right",
-    padding: 0, // Remove padding interno para alinhar
+    padding: 0,
   },
   editButtonsContainer: {
     flexDirection: "row",
@@ -336,14 +333,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  logoutButton: {
-    padding: 15,
-    borderRadius: 12,
-    alignItems: "center",
-  },
+  buttonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
+  logoutButton: { padding: 15, borderRadius: 12, alignItems: "center" },
 });

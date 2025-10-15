@@ -5,6 +5,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 interface AuthUser extends User {
   role?: "admin" | "user";
+  timezone?: string; // Adicionado
 }
 
 interface AuthContextType {
@@ -35,7 +36,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const userData = docSnap.data();
           setUser({
             ...firebaseUser,
-            role: userData.role || "user", // Default to 'user' if role is not set
+            role: userData.role || "user",
+            timezone: userData.timezone || "America/Sao_Paulo", // Adicionado
           });
         } else {
           setUser(firebaseUser);

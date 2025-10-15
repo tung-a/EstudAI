@@ -1,24 +1,30 @@
 import { Platform } from "react-native";
 
-const accentColor = "#E91E63"; // Cor de destaque principal
-const destructiveColor = "#d9534f"; // Cor para ações de "perigo"
+// --- ESCOLHA SUA PALETA DE CORES AQUI ---
+// Basta descomentar a linha da cor que você deseja usar
+const accentColor = "#4f8dcfff"; // Azul Sereno (Padrão Implementado)
+// const accentColor = "#F57C00"; // Laranja Vibrante
+// const accentColor = "#2E7D32"; // Verde Esmeralda
+// const accentColor = "#E91E63"; // Rosa Original
+
+const destructiveColor = "#d9534f";
 
 export const Colors = {
   light: {
     text: "#11181C",
-    background: "#fff",
-    tint: accentColor, // Unificado com a cor de destaque
+    background: "#f7f7f8", // Um branco um pouco mais suave
+    tint: accentColor,
     icon: "#687076",
     tabIconDefault: "#687076",
     tabIconSelected: accentColor,
-    card: "#f9f9f9",
+    card: "#ffffff", // Cards brancos para contraste
     accent: accentColor,
     destructive: destructiveColor,
   },
   dark: {
     text: "#ECEDEE",
     background: "#151718",
-    tint: accentColor, // Unificado com a cor de destaque
+    tint: accentColor,
     icon: "#9BA1A6",
     tabIconDefault: "#9BA1A6",
     tabIconSelected: accentColor,
