@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,6 +58,23 @@ export default function ProfileScreen() {
   }, []);
 
   const handleLogout = async () => {
+    if (Platform.OS === "web") {
+      const confirmed =
+        typeof window !== "undefined"
+          ? window.confirm("Tem certeza que deseja sair da sua conta?")
+          : false;
+
+      if (confirmed) {
+        try {
+          await signOut(auth);
+        } catch (error: any) {
+          Alert.alert("Erro", "Não foi possível fazer o logout.");
+          console.error("Erro ao fazer logout:", error);
+        }
+      }
+      return;
+    }
+
     Alert.alert(
       "Confirmar Saída",
       "Tem certeza que deseja sair da sua conta?",
@@ -69,7 +87,8 @@ export default function ProfileScreen() {
             try {
               await signOut(auth);
             } catch (error: any) {
-              Alert.alert("Erro", "Não foi possível fazer o logout.", error);
+              Alert.alert("Erro", "Não foi possível fazer o logout.");
+              console.error("Erro ao fazer logout:", error);
             }
           },
         },

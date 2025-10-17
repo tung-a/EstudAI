@@ -5,11 +5,12 @@ import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +34,9 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [courses, setCourses] = useState<string[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  const [courseModalVisible, setCourseModalVisible] = useState(false);
 
   // Estados temporários para a edição
   const [editableAge, setEditableAge] = useState("");
@@ -71,6 +75,57 @@ export default function ProfileScreen() {
     fetchUserProfile();
   }, []);
 
+  useEffect(() => {
+    if (!isEditing) {
+      setCourseModalVisible(false);
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCourses = async () => {
+      setCoursesLoading(true);
+      try {
+        const snapshot = await getDocs(collection(db, "prioridades_cursos"));
+        if (!isMounted) {
+          return;
+        }
+        const loadedCourses = snapshot.docs
+          .map((courseDoc) => courseDoc.data()?.nomeCurso)
+          .filter((name): name is string => typeof name === "string" && name.trim().length > 0)
+          .map((name) => name.trim())
+          .reduce<string[]>((acc, name) => {
+            const lower = name.toLowerCase();
+            if (!acc.some((existing) => existing.toLowerCase() === lower)) {
+              acc.push(name);
+            }
+            return acc;
+          }, [])
+          .sort((a, b) => a.localeCompare(b, "pt-BR"));
+        setCourses(loadedCourses);
+      } catch (error) {
+        console.error("Erro ao carregar cursos:", error);
+        if (isMounted) {
+          Alert.alert(
+            "Erro",
+            "Não foi possível carregar a lista de cursos. Tente novamente mais tarde."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setCoursesLoading(false);
+        }
+      }
+    };
+
+    fetchCourses();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -106,6 +161,11 @@ export default function ProfileScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSelectCourse = (courseName: string) => {
+    setEditableGoal(courseName);
+    setCourseModalVisible(false);
   };
 
   if (loading) {
@@ -155,14 +215,50 @@ export default function ProfileScreen() {
                 <>
                   {/* Campos de edição existentes... */}
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.label}>Objetivo:</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: themeColors.text }]}
-                      value={editableGoal}
-                      onChangeText={setEditableGoal}
-                      placeholder="Ex: ENEM, FUVEST"
-                      placeholderTextColor={themeColors.icon}
-                    />
+                    <ThemedText style={styles.label}>
+                      Curso pretendido:
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[
+                        styles.selectorButton,
+                        {
+                          borderColor: themeColors.icon,
+                          opacity: coursesLoading ? 0.6 : 1,
+                        },
+                      ]}
+                      onPress={() => setCourseModalVisible(true)}
+                      disabled={coursesLoading}
+                    >
+                      {coursesLoading ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={themeColors.accent}
+                          style={styles.selectorActivity}
+                        />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.selectorText,
+                            {
+                              color:
+                                editableGoal?.length
+                                  ? themeColors.text
+                                  : themeColors.icon,
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {editableGoal?.length
+                            ? editableGoal
+                            : "Selecionar curso"}
+                        </Text>
+                      )}
+                      <MaterialIcons
+                        name="arrow-drop-down"
+                        size={24}
+                        color={themeColors.icon}
+                      />
+                    </TouchableOpacity>
                   </View>
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.label}>Idade:</ThemedText>
@@ -226,7 +322,9 @@ export default function ProfileScreen() {
                 <>
                   {/* Campos de visualização existentes... */}
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.label}>Objetivo:</ThemedText>
+                    <ThemedText style={styles.label}>
+                      Curso pretendido:
+                    </ThemedText>
                     <ThemedText style={styles.info}>
                       {profile.goal || "Não informado"}
                     </ThemedText>
@@ -266,6 +364,88 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal
+        visible={courseModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCourseModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContainer,
+              { backgroundColor: themeColors.card },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: themeColors.text }]}>Escolha o curso</Text>
+              <TouchableOpacity
+                onPress={() => setCourseModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <MaterialIcons
+                  name="close"
+                  size={22}
+                  color={themeColors.icon}
+                />
+              </TouchableOpacity>
+            </View>
+            {coursesLoading ? (
+              <View style={styles.modalLoaderContainer}>
+                <ActivityIndicator size="large" color={themeColors.accent} />
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.modalContent}
+                contentContainerStyle={styles.modalContentContainer}
+              >
+                {courses.length === 0 ? (
+                  <Text
+                    style={[
+                      styles.modalEmptyText,
+                      { color: themeColors.icon },
+                    ]}
+                  >
+                    Nenhum curso disponível.
+                  </Text>
+                ) : (
+                  courses.map((courseName) => (
+                    <TouchableOpacity
+                      key={courseName}
+                      style={[
+                        styles.modalOption,
+                        {
+                          borderColor: themeColors.icon,
+                          backgroundColor:
+                            editableGoal === courseName
+                              ? themeColors.accent
+                              : "transparent",
+                        },
+                      ]}
+                      onPress={() => handleSelectCourse(courseName)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalOptionText,
+                          {
+                            color:
+                              editableGoal === courseName
+                                ? "#FFFFFF"
+                                : themeColors.text,
+                          },
+                        ]}
+                      >
+                        {courseName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -310,6 +490,26 @@ const styles = StyleSheet.create({
     textAlign: "right",
     padding: 0,
   },
+  selectorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    minHeight: 36,
+  },
+  selectorText: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginRight: 4,
+    maxWidth: 180,
+    textAlign: "right",
+  },
+  selectorActivity: {
+    marginRight: 8,
+  },
   editButtonsContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -335,4 +535,56 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
   logoutButton: { padding: 15, borderRadius: 12, alignItems: "center" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalContainer: {
+    borderRadius: 16,
+    maxHeight: "70%",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    maxHeight: 320,
+  },
+  modalContentContainer: {
+    paddingBottom: 8,
+  },
+  modalOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  modalLoaderContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 180,
+  },
+  modalEmptyText: {
+    fontSize: 16,
+    textAlign: "center",
+  },
 });

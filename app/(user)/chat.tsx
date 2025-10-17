@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 // IMPORT ADICIONADO
+import { useAuth } from "@/hooks/use-auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
@@ -67,6 +68,7 @@ const createConversation = (index: number): Conversation => ({
 });
 
 export default function ChatScreen() {
+  const { user, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -79,6 +81,7 @@ export default function ChatScreen() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+  const storageKey = `${CONVERSATIONS_STORAGE_KEY}:${user?.uid ?? "guest"}`;
 
   const model = genAI.getGenerativeModel({
     model: "gemini-2.0-flash",
@@ -95,9 +98,33 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const initializeDefaultConversation = () => {
+      if (!isMounted) {
+        return;
+      }
+      const initialConversation = createConversation(1);
+      setConversations([initialConversation]);
+      setSelectedConversationId(initialConversation.id);
+      setConversationCounter(2);
+    };
+
     const loadState = async () => {
+      setHydrated(false);
+      setInput("");
+      setSuggestedQuestions([]);
+
       try {
-        const stored = await AsyncStorage.getItem(CONVERSATIONS_STORAGE_KEY);
+        const stored = await AsyncStorage.getItem(storageKey);
+        if (!isMounted) {
+          return;
+        }
+
         if (stored) {
           const parsed = JSON.parse(stored) as PersistedChatState;
           if (parsed?.conversations?.length) {
@@ -112,26 +139,26 @@ export default function ChatScreen() {
           }
         }
 
-        const initialConversation = createConversation(1);
-        setConversations([initialConversation]);
-        setSelectedConversationId(initialConversation.id);
-        setConversationCounter(2);
+        initializeDefaultConversation();
       } catch (error) {
         console.error("Erro ao carregar histórico de conversas:", error);
-        const fallbackConversation = createConversation(1);
-        setConversations([fallbackConversation]);
-        setSelectedConversationId(fallbackConversation.id);
-        setConversationCounter(2);
+        initializeDefaultConversation();
       } finally {
-        setHydrated(true);
+        if (isMounted) {
+          setHydrated(true);
+        }
       }
     };
 
     loadState();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [storageKey, authLoading]);
 
   useEffect(() => {
-    if (!hydrated) {
+    if (!hydrated || authLoading) {
       return;
     }
 
@@ -142,17 +169,21 @@ export default function ChatScreen() {
           selectedConversationId,
           counter: conversationCounter,
         };
-        await AsyncStorage.setItem(
-          CONVERSATIONS_STORAGE_KEY,
-          JSON.stringify(payload)
-        );
+        await AsyncStorage.setItem(storageKey, JSON.stringify(payload));
       } catch (error) {
         console.error("Erro ao salvar histórico de conversas:", error);
       }
     };
 
     persistState();
-  }, [conversations, selectedConversationId, conversationCounter, hydrated]);
+  }, [
+    conversations,
+    selectedConversationId,
+    conversationCounter,
+    hydrated,
+    storageKey,
+    authLoading,
+  ]);
 
   useEffect(() => {
     setSuggestedQuestions([]);
@@ -251,6 +282,32 @@ export default function ChatScreen() {
         .replace(/^json\s*/i, "")
         .trim();
 
+    const normalizeQuestionCandidate = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return "";
+      }
+
+      const stripQuotes = trimmed
+        .replace(/^[\s"'`“”«»]+/, "")
+        .replace(/[\s"'`“”«»]+$/, "");
+
+      const stripTrailingPunctuation = stripQuotes
+        .replace(/[\s,;:]+$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!stripTrailingPunctuation) {
+        return "";
+      }
+
+      const singleQuestionMark = stripTrailingPunctuation.replace(/\?+$/, "?");
+
+      return singleQuestionMark.endsWith("?")
+        ? singleQuestionMark
+        : `${singleQuestionMark}?`;
+    };
+
     const splitCombinedEntries = (items: string[]) => {
       const expanded: string[] = [];
 
@@ -267,8 +324,10 @@ export default function ChatScreen() {
 
         if (enumeratedParts.length >= 2) {
           enumeratedParts.forEach((part) => {
-            const normalized = part.endsWith("?") ? part : `${part}?`;
-            expanded.push(normalized);
+            const normalized = normalizeQuestionCandidate(part);
+            if (normalized) {
+              expanded.push(normalized);
+            }
           });
           return;
         }
@@ -280,13 +339,18 @@ export default function ChatScreen() {
 
         if (questionSegments.length > 1) {
           questionSegments.forEach((segment) => {
-            const normalized = segment.endsWith("?") ? segment : `${segment}?`;
-            expanded.push(normalized);
+            const normalized = normalizeQuestionCandidate(segment);
+            if (normalized) {
+              expanded.push(normalized);
+            }
           });
           return;
         }
 
-        expanded.push(trimmed.endsWith("?") ? trimmed : `${trimmed}?`);
+        const normalized = normalizeQuestionCandidate(trimmed);
+        if (normalized) {
+          expanded.push(normalized);
+        }
       });
 
       return expanded;
@@ -413,8 +477,8 @@ Resposta do assistente: "${answer}".`,
           },
         ],
         generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 64,
+          temperature: 0.5,
+          maxOutputTokens: 256,
           topP: 0.9,
           topK: 40,
         },
