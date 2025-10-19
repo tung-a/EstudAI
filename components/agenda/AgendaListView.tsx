@@ -5,7 +5,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { formatDuration, formatHeaderTitle } from "@/lib/dateUtils";
 import { MaterialIcons } from "@expo/vector-icons"; // Importar ícones
-import React, { forwardRef, useMemo } from "react";
+import { forwardRef, useMemo, useState } from "react";
 import {
   SectionList,
   SectionListProps,
@@ -29,6 +29,7 @@ export const AgendaListView = forwardRef<
 >(({ events, onDeleteEvent, todayString, ...sectionListProps }, ref) => {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const sections = useMemo(() => {
     // Pega todas as datas que têm eventos
@@ -75,34 +76,74 @@ export const AgendaListView = forwardRef<
           )}
         </View>
       )}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          onLongPress={() => onDeleteEvent(item.id)}
-          style={[
-            styles.agendaEventItem,
-            { backgroundColor: themeColors.card },
-          ]}
-        >
-          {/* ... Conteúdo do item (inalterado) ... */}
-          <View style={styles.eventTimeDetails}>
-            <ThemedText style={styles.agendaEventTime}>{item.time}</ThemedText>
-            <ThemedText style={styles.agendaEventDuration}>
-              {formatDuration(item.duration)}
-            </ThemedText>
-          </View>
-          <View
+      renderItem={({ item }) => {
+        const hasRecommendation = Boolean(item.studyRecommendation);
+        const isExpanded = expandedEventId === item.id;
+
+        return (
+          <TouchableOpacity
+            onPress={() => {
+              if (hasRecommendation) {
+                setExpandedEventId((current) =>
+                  current === item.id ? null : item.id
+                );
+              }
+            }}
+            onLongPress={() => onDeleteEvent(item.id)}
             style={[
-              styles.eventTitleBar,
-              { backgroundColor: themeColors.accent },
+              styles.agendaEventItem,
+              { backgroundColor: themeColors.card },
             ]}
-          />
-          <View style={styles.agendaEventTitleContainer}>
-            <ThemedText style={styles.agendaEventTitle} numberOfLines={2}>
-              {item.title}
-            </ThemedText>
-          </View>
-        </TouchableOpacity>
-      )}
+          >
+            <View style={styles.eventTimeDetails}>
+              <ThemedText style={styles.agendaEventTime}>{item.time}</ThemedText>
+              <ThemedText style={styles.agendaEventDuration}>
+                {formatDuration(item.duration)}
+              </ThemedText>
+            </View>
+            <View
+              style={[
+                styles.eventTitleBar,
+                { backgroundColor: themeColors.accent },
+              ]}
+            />
+            <View style={styles.agendaEventTitleContainer}>
+              <ThemedText style={styles.agendaEventTitle} numberOfLines={2}>
+                {item.title}
+              </ThemedText>
+              {item.disciplinaNome && (
+                <ThemedText style={styles.agendaEventSubtitle} numberOfLines={1}>
+                  {item.disciplinaNome}
+                </ThemedText>
+              )}
+              {hasRecommendation && (
+                <View
+                  style={[
+                    styles.recommendationSection,
+                    { borderColor: themeColors.icon + "30" },
+                  ]}
+                >
+                  <View style={styles.recommendationHeader}>
+                    <ThemedText style={styles.recommendationLabel}>
+                      Sugestão de estudo
+                    </ThemedText>
+                    <MaterialIcons
+                      name={isExpanded ? "expand-less" : "expand-more"}
+                      size={20}
+                      color={themeColors.icon}
+                    />
+                  </View>
+                  {isExpanded && (
+                    <ThemedText style={styles.recommendationText}>
+                      {item.studyRecommendation}
+                    </ThemedText>
+                  )}
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        );
+      }}
       ListEmptyComponent={
         // Mostrado apenas se 'sections' estiver totalmente vazio
         <View style={styles.emptyContainer}>
@@ -191,6 +232,11 @@ const styles = StyleSheet.create({
   agendaEventTitle: {
     fontSize: 16,
   },
+  agendaEventSubtitle: {
+    fontSize: 13,
+    opacity: 0.7,
+    marginTop: 2,
+  },
   emptyContainer: {
     flex: 1, // Ocupa espaço
     justifyContent: "center",
@@ -202,5 +248,24 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontSize: 16,
     opacity: 0.7,
+  },
+  recommendationSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  recommendationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  recommendationLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  recommendationText: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
