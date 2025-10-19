@@ -1,21 +1,25 @@
+// components/agenda/DayTimelineView.tsx
 import { Event, EventsByDate } from "@/app/(user)/agenda";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { formatDuration, getLocalDate } from "@/lib/dateUtils";
+import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  DimensionValue, // Import DimensionValue
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from "react-native";
 
 const PIXELS_PER_HOUR = 80;
 
-// Componente indicador de hora com lógica de timezone robusta
-const CurrentTimeIndicator = ({ timezone }: { timezone: string }) => {
+// Componente indicador de hora (simplificado, usa fuso do dispositivo)
+const CurrentTimeIndicator = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -23,77 +27,58 @@ const CurrentTimeIndicator = ({ timezone }: { timezone: string }) => {
     return () => clearInterval(timerId);
   }, []);
 
-  const getMinutesSinceMidnight = () => {
-    try {
-      const formatter = new Intl.DateTimeFormat("en-GB", {
-        timeZone: timezone,
-        hour: "numeric",
-        minute: "numeric",
-        hour12: false,
-      });
-      const parts = formatter.formatToParts(currentTime);
-      const hourPart = parts.find((p) => p.type === "hour");
-      const minutePart = parts.find((p) => p.type === "minute");
-      const hour = hourPart ? parseInt(hourPart.value, 10) % 24 : 0;
-      const minute = minutePart ? parseInt(minutePart.value, 10) : 0;
-      return hour * 60 + minute;
-    } catch (e: any) {
-      console.error("Erro ao calcular o horário com timezone:", e.message);
-      // Fallback para o horário do sistema se o timezone for inválido
-      return currentTime.getHours() * 60 + currentTime.getMinutes();
-    }
-  };
-
-  const minutesSinceMidnight = getMinutesSinceMidnight();
+  const minutesSinceMidnight =
+    currentTime.getHours() * 60 + currentTime.getMinutes();
   const topPosition = (minutesSinceMidnight / 60) * PIXELS_PER_HOUR;
+  const indicatorColor = Colors.light.destructive; // Usando a cor diretamente
 
   return (
     <View
       style={[styles.timeIndicator, { top: topPosition }]}
       pointerEvents="none"
     >
-      <View style={styles.timeIndicatorDot} />
-      <View style={styles.timeIndicatorLine} />
+      <View
+        style={[styles.timeIndicatorDot, { backgroundColor: indicatorColor }]}
+      />
+      <View
+        style={[styles.timeIndicatorLine, { backgroundColor: indicatorColor }]}
+      />
     </View>
   );
 };
 
+// Tipos das Props (sem 'timezone')
 type DayTimelineViewProps = {
   events: EventsByDate;
   selectedDate: string;
   onDeleteEvent: (eventId: string) => void;
-  timezone: string;
+};
+
+// Tipo interno para eventos com layout calculado
+type LayoutEvent = Event & {
+  startMinutes: number;
+  endMinutes: number;
+  top: number;
+  height: number;
+  width: string; // Mantém como string para cálculo
+  left: string; // Mantém como string para cálculo
 };
 
 export const DayTimelineView = ({
   events,
   selectedDate,
   onDeleteEvent,
-  timezone,
 }: DayTimelineViewProps) => {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const isToday = selectedDate === getLocalDate();
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // useEffect para scroll (inalterado)
   useEffect(() => {
     if (isToday && scrollViewRef.current) {
       const now = new Date();
-      const hour = parseInt(
-        now.toLocaleTimeString("en-US", {
-          timeZone: timezone,
-          hour12: false,
-          hour: "2-digit",
-        })
-      );
-      const minute = parseInt(
-        now.toLocaleTimeString("en-US", {
-          timeZone: timezone,
-          minute: "2-digit",
-        })
-      );
-      const minutesSinceMidnight = (hour % 24) * 60 + minute;
-
+      const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
       const scrollToPosition =
         (minutesSinceMidnight / 60) * PIXELS_PER_HOUR - PIXELS_PER_HOUR * 1.5;
 
@@ -104,37 +89,51 @@ export const DayTimelineView = ({
         });
       }, 300);
     }
-  }, [isToday, selectedDate, timezone]);
+  }, [isToday, selectedDate]);
 
+  // useMemo para calcular layout (inalterado)
   const laidOutEvents = useMemo(() => {
-    const dayEvents: LayoutEvent[] = (events[selectedDate] || []).map(
-      (event) => {
-        const [hour, minute] = event.time.split(":").map(Number);
-        const startMinutes = hour * 60 + minute;
-        return {
-          ...event,
-          startMinutes,
-          endMinutes: startMinutes + event.duration,
-        };
-      }
-    );
-    dayEvents.sort((a, b) => a.startMinutes - b.startMinutes);
-    const groups: LayoutEvent[][] = [];
-    for (const event of dayEvents) {
+    const dayEventsRaw: (Event & {
+      startMinutes: number;
+      endMinutes: number;
+    })[] = (events[selectedDate] || []).map((event) => {
+      const [hour, minute] = event.time.split(":").map(Number);
+      const startMinutes = hour * 60 + minute;
+      return {
+        ...event,
+        startMinutes,
+        endMinutes: startMinutes + event.duration,
+      };
+    });
+    dayEventsRaw.sort((a, b) => a.startMinutes - b.startMinutes);
+
+    const groups: (Event & { startMinutes: number; endMinutes: number })[][] =
+      [];
+    for (const event of dayEventsRaw) {
       let placed = false;
       for (const group of groups) {
-        const lastEventInGroup = group[group.length - 1];
-        if (event.startMinutes < lastEventInGroup.endMinutes) {
+        const groupEndTime = group.reduce(
+          (maxEnd, ev) => Math.max(maxEnd, ev.endMinutes),
+          0
+        );
+        if (event.startMinutes < groupEndTime) {
           group.push(event);
           placed = true;
           break;
         }
       }
-      if (!placed) groups.push([event]);
+      if (!placed) {
+        groups.push([event]);
+      }
     }
-    const finalLayout: any[] = [];
+
+    const finalLayout: LayoutEvent[] = [];
     for (const group of groups) {
-      const columns: LayoutEvent[][] = [];
+      group.sort((a, b) => a.startMinutes - b.startMinutes);
+      const columns: (Event & {
+        startMinutes: number;
+        endMinutes: number;
+      })[][] = [];
       for (const event of group) {
         let placedInColumn = false;
         for (const column of columns) {
@@ -145,8 +144,11 @@ export const DayTimelineView = ({
             break;
           }
         }
-        if (!placedInColumn) columns.push([event]);
+        if (!placedInColumn) {
+          columns.push([event]);
+        }
       }
+
       const numColumns = columns.length;
       for (let i = 0; i < numColumns; i++) {
         for (const event of columns[i]) {
@@ -170,6 +172,7 @@ export const DayTimelineView = ({
       contentContainerStyle={{ height: 24 * PIXELS_PER_HOUR }}
       showsVerticalScrollIndicator={false}
     >
+      {/* Linhas de hora */}
       {Array.from({ length: 24 }).map((_, i) => (
         <View
           key={`hour-${i}`}
@@ -179,38 +182,57 @@ export const DayTimelineView = ({
             2,
             "0"
           )}:00`}</ThemedText>
-          <View style={[styles.hourLine, { borderColor: themeColors.icon }]} />
+          <View
+            style={[styles.hourLine, { borderColor: themeColors.icon + "30" }]}
+          />
         </View>
       ))}
 
-      {isToday && <CurrentTimeIndicator timezone={timezone} />}
+      {/* Indicador de hora atual */}
+      {isToday && <CurrentTimeIndicator />}
 
-      {laidOutEvents.map((event) => (
-        <TouchableOpacity
-          key={event.id}
-          onLongPress={() => onDeleteEvent(event.id)}
-          style={[
-            styles.timelineEvent,
-            {
-              top: event.top,
-              height: Math.max(40, (event.duration / 60) * PIXELS_PER_HOUR - 2),
-              width: event.width,
-              left: event.left,
-              backgroundColor: themeColors.accent,
-              borderColor: themeColors.background,
-            },
-          ]}
-        >
-          <Text style={styles.timelineEventTitle} numberOfLines={2}>
-            {event.title}
-          </Text>
-          <Text style={styles.timelineEventTime}>
-            {event.time} - {formatDuration(event.duration)}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      {/* Renderiza os eventos posicionados */}
+      {laidOutEvents.map((event) => {
+        // --- CORREÇÃO: Define o estilo dinâmico com tipo explícito E cast para DimensionValue ---
+        const dynamicEventStyle: ViewStyle = {
+          position: "absolute",
+          top: event.top,
+          height: Math.max(25, event.height - 2),
+          // Explicitamente diz ao TS que essas strings são DimensionValues válidos
+          width: event.width as DimensionValue,
+          left: event.left as DimensionValue,
+          backgroundColor: themeColors.accent,
+          borderColor: themeColors.background,
+        };
+        // --- FIM CORREÇÃO ---
+
+        return (
+          <TouchableOpacity
+            key={event.id}
+            onLongPress={() => onDeleteEvent(event.id)}
+            style={[styles.timelineEvent, dynamicEventStyle]} // Combina estilos
+            activeOpacity={0.8}
+          >
+            <Text style={styles.timelineEventTitle} numberOfLines={1}>
+              {event.title}
+            </Text>
+            {event.height > 35 && (
+              <Text style={styles.timelineEventTime} numberOfLines={1}>
+                {event.time} ({formatDuration(event.duration)})
+              </Text>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+
+      {/* Mensagem se não houver eventos no dia */}
       {laidOutEvents.length === 0 && (
         <View style={styles.emptyContainer}>
+          <MaterialIcons
+            name="calendar-today"
+            size={40}
+            color={themeColors.icon + "80"}
+          />
           <ThemedText style={styles.noEventsText}>
             Nenhum evento para este dia.
           </ThemedText>
@@ -221,13 +243,18 @@ export const DayTimelineView = ({
 };
 
 const styles = StyleSheet.create({
-  timelineContainer: { flex: 1, paddingLeft: 60, paddingRight: 10 },
+  timelineContainer: {
+    flex: 1,
+    paddingLeft: 60,
+    paddingRight: 10,
+  },
   hourContainer: {
     position: "absolute",
     left: 0,
     right: 0,
     flexDirection: "row",
     alignItems: "center",
+    height: 0,
   },
   hourText: {
     position: "absolute",
@@ -236,25 +263,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.5,
   },
-  hourLine: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, opacity: 0.3 },
+  hourLine: {
+    flex: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    opacity: 0.3,
+  },
   timelineEvent: {
-    position: "absolute",
-    borderRadius: 8,
-    padding: 8,
+    // position removido daqui
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderWidth: 1,
     overflow: "hidden",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     marginHorizontal: 1,
   },
-  timelineEventTitle: { color: "#fff", fontWeight: "bold", fontSize: 14 },
-  timelineEventTime: { color: "#fff", fontSize: 12, opacity: 0.9 },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100%",
+  timelineEventTitle: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 13,
+    marginBottom: 2,
   },
-  noEventsText: { textAlign: "center", fontSize: 16, opacity: 0.7 },
+  timelineEventTime: {
+    color: "#fff",
+    fontSize: 11,
+    opacity: 0.9,
+  },
+  emptyContainer: {
+    position: "absolute",
+    top: "30%",
+    left: 60,
+    right: 10,
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  noEventsText: {
+    textAlign: "center",
+    marginTop: 15,
+    fontSize: 16,
+    opacity: 0.7,
+  },
   timeIndicator: {
     position: "absolute",
     left: -50,
@@ -262,21 +310,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     zIndex: 10,
+    height: 0,
   },
   timeIndicatorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Colors.light.destructive,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: -4,
+    zIndex: 11,
   },
   timeIndicatorLine: {
     flex: 1,
-    height: 2,
-    backgroundColor: Colors.light.destructive,
+    height: 1.5,
   },
 });
-
-type LayoutEvent = Event & {
-  startMinutes: number;
-  endMinutes: number;
-};

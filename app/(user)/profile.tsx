@@ -1,15 +1,24 @@
+// app/(user)/profile.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
+// useAuth não é mais necessário aqui se não precisarmos do timezone
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, updateDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
+import React, { useEffect, useState } from "react"; // Removido useMemo se não for mais usado
 import {
   ActivityIndicator,
   Alert,
+  FlatList, // Pode remover se não usar mais (curso usa FlatList agora)
   Modal,
   ScrollView,
   StyleSheet,
@@ -26,74 +35,98 @@ type UserProfile = {
   age?: string;
   school?: string;
   goal?: string;
-  timezone?: string; // Adicionado
+  // timezone?: string; // Removido do tipo
 };
 
+// Remover a função getTimezones se não for mais usada em nenhum lugar
+
 export default function ProfileScreen() {
+  // Remover estados relacionados ao timezone
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [courses, setCourses] = useState<string[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(false);
   const [courseModalVisible, setCourseModalVisible] = useState(false);
+  // Remover: timezoneModalVisible, timezoneSearch, savingTimezone, currentTimezone
 
-  // Estados temporários para a edição
+  // Estados temporários para edição (sem timezone)
   const [editableAge, setEditableAge] = useState("");
   const [editableSchool, setEditableSchool] = useState("");
   const [editableGoal, setEditableGoal] = useState("");
-  const [editableTimezone, setEditableTimezone] = useState("America/Sao_Paulo"); // Adicionado
+  // Remover: editableTimezone
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 
+  // Efeito para buscar perfil (sem lógica de timezone)
   useEffect(() => {
     const fetchUserProfile = async () => {
+      setLoading(true);
       const user = auth.currentUser;
       if (user) {
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          const data = docSnap.data() as UserProfile;
+          const data = docSnap.data() as Omit<UserProfile, "timezone">; // Ajusta o tipo
           setProfile(data);
           setEditableAge(data.age || "");
           setEditableSchool(data.school || "");
           setEditableGoal(data.goal || "");
-          setEditableTimezone(data.timezone || "America/Sao_Paulo"); // Adicionado
         } else {
           setProfile({
             name: user.displayName || "Usuário",
             email: user.email || "",
-            timezone: "America/Sao_Paulo",
+            // timezone removido
           });
+          setEditableAge("");
+          setEditableSchool("");
+          setEditableGoal("");
         }
+      } else {
+        setProfile(null);
       }
       setLoading(false);
     };
 
-    fetchUserProfile();
-  }, []);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setCourseModalVisible(false);
+    // Apenas checa se currentUser existe, useAuth não é mais necessário aqui
+    if (auth.currentUser) {
+      fetchUserProfile();
+    } else {
+      setLoading(false); // Garante que loading termine se não houver usuário
     }
-  }, [isEditing]);
+    // Remove authUser da dependência
+  }, []); // Executa apenas uma vez ao montar
 
+  // Efeito para resetar edição (inalterado)
+  useEffect(() => {
+    if (!isEditingInfo) {
+      setCourseModalVisible(false);
+      // Reseta campos editáveis para os valores atuais do perfil ao cancelar
+      if (profile) {
+        setEditableAge(profile.age || "");
+        setEditableSchool(profile.school || "");
+        setEditableGoal(profile.goal || "");
+      }
+    }
+  }, [isEditingInfo, profile]);
+
+  // Efeito para buscar cursos (lógica inalterada)
   useEffect(() => {
     let isMounted = true;
-
     const fetchCourses = async () => {
       setCoursesLoading(true);
       try {
         const snapshot = await getDocs(collection(db, "prioridades_cursos"));
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
         const loadedCourses = snapshot.docs
           .map((courseDoc) => courseDoc.data()?.nomeCurso)
-          .filter((name): name is string => typeof name === "string" && name.trim().length > 0)
+          .filter(
+            (name): name is string =>
+              typeof name === "string" && name.trim().length > 0
+          )
           .map((name) => name.trim())
           .reduce<string[]>((acc, name) => {
             const lower = name.toLowerCase();
@@ -107,10 +140,7 @@ export default function ProfileScreen() {
       } catch (error) {
         console.error("Erro ao carregar cursos:", error);
         if (isMounted) {
-          Alert.alert(
-            "Erro",
-            "Não foi possível carregar a lista de cursos. Tente novamente mais tarde."
-          );
+          Alert.alert("Erro", "Não foi possível carregar a lista de cursos.");
         }
       } finally {
         if (isMounted) {
@@ -118,23 +148,24 @@ export default function ProfileScreen() {
         }
       }
     };
-
     fetchCourses();
-
     return () => {
       isMounted = false;
     };
   }, []);
 
+  // Handler de Logout (lógica inalterada)
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      // Navegação tratada pelo _layout raiz
     } catch (error: any) {
       Alert.alert("Erro", "Não foi possível fazer o logout.", error);
     }
   };
 
-  const handleSaveProfile = async () => {
+  // Handler para salvar (sem timezone)
+  const handleSaveInfo = async () => {
     const user = auth.currentUser;
     if (!user) return;
 
@@ -145,17 +176,18 @@ export default function ProfileScreen() {
         age: editableAge,
         school: editableSchool,
         goal: editableGoal,
-        timezone: editableTimezone, // Adicionado
+        // timezone: editableTimezone, // Removido
       });
+      // Atualiza estado local otimisticamente
       setProfile((prevProfile) => ({
         ...prevProfile!,
         age: editableAge,
         school: editableSchool,
         goal: editableGoal,
-        timezone: editableTimezone, // Adicionado
+        // timezone removido
       }));
-      setIsEditing(false);
-      Alert.alert("Sucesso", "Perfil atualizado!");
+      setIsEditingInfo(false);
+      Alert.alert("Sucesso", "Informações atualizadas!");
     } catch (error: any) {
       Alert.alert("Erro", "Não foi possível salvar as alterações.", error);
     } finally {
@@ -163,11 +195,15 @@ export default function ProfileScreen() {
     }
   };
 
+  // Handler para selecionar curso (inalterado)
   const handleSelectCourse = (courseName: string) => {
     setEditableGoal(courseName);
     setCourseModalVisible(false);
   };
 
+  // Remover handler handleSelectTimezone
+
+  // Indicador de loading inicial
   if (loading) {
     return (
       <ThemedView style={styles.loadingContainer}>
@@ -180,6 +216,7 @@ export default function ProfileScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Header */}
           <View style={styles.header}>
             <View
               style={[styles.avatar, { backgroundColor: themeColors.card }]}
@@ -187,11 +224,12 @@ export default function ProfileScreen() {
               <MaterialIcons name="person" size={60} color={themeColors.icon} />
             </View>
             <ThemedText type="title" style={styles.userName}>
-              {profile?.name}
+              {profile?.name || "Usuário"}
             </ThemedText>
             <ThemedText style={styles.userEmail}>{profile?.email}</ThemedText>
           </View>
 
+          {/* Card de Informações (sem fuso horário) */}
           {profile && (
             <ThemedView
               lightColor={Colors.light.card}
@@ -200,8 +238,8 @@ export default function ProfileScreen() {
             >
               <View style={styles.cardHeader}>
                 <ThemedText type="subtitle">Informações</ThemedText>
-                {!isEditing && (
-                  <TouchableOpacity onPress={() => setIsEditing(true)}>
+                {!isEditingInfo && (
+                  <TouchableOpacity onPress={() => setIsEditingInfo(true)}>
                     <MaterialIcons
                       name="edit"
                       size={24}
@@ -211,13 +249,17 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              {isEditing ? (
+              {isEditingInfo ? (
                 <>
-                  {/* Campos de edição existentes... */}
+                  {/* Linha Curso - Editável */}
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.label}>
-                      Curso pretendido:
-                    </ThemedText>
+                    <MaterialIcons
+                      name="school"
+                      size={20}
+                      color={themeColors.icon}
+                      style={styles.infoIcon}
+                    />
+                    <ThemedText style={styles.label}>Curso:</ThemedText>
                     <TouchableOpacity
                       style={[
                         styles.selectorButton,
@@ -240,10 +282,9 @@ export default function ProfileScreen() {
                           style={[
                             styles.selectorText,
                             {
-                              color:
-                                editableGoal?.length
-                                  ? themeColors.text
-                                  : themeColors.icon,
+                              color: editableGoal?.length
+                                ? themeColors.text
+                                : themeColors.icon,
                             },
                           ]}
                           numberOfLines={1}
@@ -260,44 +301,48 @@ export default function ProfileScreen() {
                       />
                     </TouchableOpacity>
                   </View>
+                  {/* Linha Idade - Editável */}
                   <View style={styles.infoRow}>
+                    <MaterialIcons
+                      name="cake"
+                      size={20}
+                      color={themeColors.icon}
+                      style={styles.infoIcon}
+                    />
                     <ThemedText style={styles.label}>Idade:</ThemedText>
                     <TextInput
                       style={[styles.input, { color: themeColors.text }]}
                       value={editableAge}
                       onChangeText={setEditableAge}
-                      placeholder="Sua idade"
+                      placeholder="Não informado"
                       placeholderTextColor={themeColors.icon}
                       keyboardType="numeric"
                     />
                   </View>
-                  <View style={styles.infoRow}>
+                  {/* Linha Instituição - Editável */}
+                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                    <MaterialIcons
+                      name="location-city"
+                      size={20}
+                      color={themeColors.icon}
+                      style={styles.infoIcon}
+                    />
                     <ThemedText style={styles.label}>Instituição:</ThemedText>
                     <TextInput
                       style={[styles.input, { color: themeColors.text }]}
                       value={editableSchool}
                       onChangeText={setEditableSchool}
-                      placeholder="Sua escola/cursinho"
+                      placeholder="Não informada"
                       placeholderTextColor={themeColors.icon}
                     />
                   </View>
-                  {/* NOVO CAMPO DE FUSO HORÁRIO */}
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                    <ThemedText style={styles.label}>Fuso Horário:</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: themeColors.text }]}
-                      value={editableTimezone}
-                      onChangeText={setEditableTimezone}
-                      placeholder="Ex: America/Sao_Paulo"
-                      placeholderTextColor={themeColors.icon}
-                      autoCapitalize="none"
-                    />
-                  </View>
+                  {/* Linha de fuso horário REMOVIDA */}
 
+                  {/* Botões Salvar/Cancelar */}
                   <View style={styles.editButtonsContainer}>
                     <TouchableOpacity
                       style={styles.cancelButton}
-                      onPress={() => setIsEditing(false)}
+                      onPress={() => setIsEditingInfo(false)}
                       disabled={saving}
                     >
                       <Text style={styles.cancelButtonText}>Cancelar</Text>
@@ -306,12 +351,13 @@ export default function ProfileScreen() {
                       style={[
                         styles.saveButton,
                         { backgroundColor: themeColors.accent },
+                        saving && styles.disabledButton,
                       ]}
-                      onPress={handleSaveProfile}
+                      onPress={handleSaveInfo}
                       disabled={saving}
                     >
                       {saving ? (
-                        <ActivityIndicator color="#fff" />
+                        <ActivityIndicator color="#fff" size="small" />
                       ) : (
                         <Text style={styles.buttonText}>Salvar</Text>
                       )}
@@ -320,39 +366,54 @@ export default function ProfileScreen() {
                 </>
               ) : (
                 <>
-                  {/* Campos de visualização existentes... */}
+                  {/* Linha Curso - Visualização */}
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.label}>
-                      Curso pretendido:
-                    </ThemedText>
-                    <ThemedText style={styles.info}>
+                    <MaterialIcons
+                      name="school"
+                      size={20}
+                      color={themeColors.icon}
+                      style={styles.infoIcon}
+                    />
+                    <ThemedText style={styles.label}>Curso:</ThemedText>
+                    <ThemedText style={styles.info} numberOfLines={1}>
                       {profile.goal || "Não informado"}
                     </ThemedText>
                   </View>
+                  {/* Linha Idade - Visualização */}
                   <View style={styles.infoRow}>
+                    <MaterialIcons
+                      name="cake"
+                      size={20}
+                      color={themeColors.icon}
+                      style={styles.infoIcon}
+                    />
                     <ThemedText style={styles.label}>Idade:</ThemedText>
                     <ThemedText style={styles.info}>
                       {profile.age || "Não informado"}
                     </ThemedText>
                   </View>
-                  <View style={styles.infoRow}>
+                  {/* Linha Instituição - Visualização */}
+                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                    <MaterialIcons
+                      name="location-city"
+                      size={20}
+                      color={themeColors.icon}
+                      style={styles.infoIcon}
+                    />
                     <ThemedText style={styles.label}>Instituição:</ThemedText>
                     <ThemedText style={styles.info}>
                       {profile.school || "Não informada"}
                     </ThemedText>
                   </View>
-                  {/* NOVO CAMPO DE FUSO HORÁRIO */}
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                    <ThemedText style={styles.label}>Fuso Horário:</ThemedText>
-                    <ThemedText style={styles.info}>
-                      {profile.timezone || "Não informado"}
-                    </ThemedText>
-                  </View>
+                  {/* Linha de fuso horário REMOVIDA */}
                 </>
               )}
             </ThemedView>
           )}
 
+          {/* Botão de Configurar Fuso Horário REMOVIDO */}
+
+          {/* Botão de Logout */}
           <TouchableOpacity
             style={[
               styles.logoutButton,
@@ -360,11 +421,18 @@ export default function ProfileScreen() {
             ]}
             onPress={handleLogout}
           >
-            <Text style={styles.buttonText}>Sair (Logout)</Text>
+            <MaterialIcons
+              name="logout"
+              size={20}
+              color="#fff"
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.buttonText}>Sair</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
 
+      {/* Modal de Seleção de Curso */}
       <Modal
         visible={courseModalVisible}
         transparent
@@ -378,8 +446,11 @@ export default function ProfileScreen() {
               { backgroundColor: themeColors.card },
             ]}
           >
+            {/* Cabeçalho do Modal */}
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: themeColors.text }]}>Escolha o curso</Text>
+              <Text style={[styles.modalTitle, { color: themeColors.text }]}>
+                Escolha o curso
+              </Text>
               <TouchableOpacity
                 onPress={() => setCourseModalVisible(false)}
                 style={styles.modalCloseButton}
@@ -391,70 +462,72 @@ export default function ProfileScreen() {
                 />
               </TouchableOpacity>
             </View>
+            {/* Conteúdo do Modal */}
             {coursesLoading ? (
               <View style={styles.modalLoaderContainer}>
                 <ActivityIndicator size="large" color={themeColors.accent} />
               </View>
             ) : (
-              <ScrollView
-                style={styles.modalContent}
-                contentContainerStyle={styles.modalContentContainer}
-              >
-                {courses.length === 0 ? (
-                  <Text
+              <FlatList // Usando FlatList
+                data={courses}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
                     style={[
-                      styles.modalEmptyText,
-                      { color: themeColors.icon },
+                      styles.modalOption,
+                      {
+                        borderColor: themeColors.icon + "50", // Borda mais suave
+                        backgroundColor:
+                          editableGoal === item
+                            ? themeColors.accent
+                            : "transparent",
+                      },
                     ]}
+                    onPress={() => handleSelectCourse(item)}
+                  >
+                    <Text
+                      style={[
+                        styles.modalOptionText,
+                        {
+                          color:
+                            editableGoal === item
+                              ? "#FFFFFF"
+                              : themeColors.text,
+                        },
+                      ]}
+                    >
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <Text
+                    style={[styles.modalEmptyText, { color: themeColors.icon }]}
                   >
                     Nenhum curso disponível.
                   </Text>
-                ) : (
-                  courses.map((courseName) => (
-                    <TouchableOpacity
-                      key={courseName}
-                      style={[
-                        styles.modalOption,
-                        {
-                          borderColor: themeColors.icon,
-                          backgroundColor:
-                            editableGoal === courseName
-                              ? themeColors.accent
-                              : "transparent",
-                        },
-                      ]}
-                      onPress={() => handleSelectCourse(courseName)}
-                    >
-                      <Text
-                        style={[
-                          styles.modalOptionText,
-                          {
-                            color:
-                              editableGoal === courseName
-                                ? "#FFFFFF"
-                                : themeColors.text,
-                          },
-                        ]}
-                      >
-                        {courseName}
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </ScrollView>
+                }
+                style={styles.modalContent}
+                contentContainerStyle={styles.modalContentContainer}
+              />
             )}
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Seleção de Fuso Horário REMOVIDO */}
     </ThemedView>
   );
 }
 
+// --- Estilos ---
+// Remover estilos: configButton, configButtonContent, configButtonLabel, configButtonValue
+// Remover searchInput se não for mais usado por outros modais
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  scrollContent: { padding: 20 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
   header: { alignItems: "center", marginBottom: 30 },
   avatar: {
     width: 100,
@@ -463,49 +536,75 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(128,128,128,0.1)",
   },
   userName: { fontSize: 28, fontWeight: "bold" },
   userEmail: { fontSize: 16, color: "gray", marginTop: 4 },
-  infoCard: { borderRadius: 12, padding: 16, marginBottom: 30 },
+  infoCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 30, // Aumentado de volta
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 15,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(128,128,128,0.1)",
   },
   infoRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "rgba(128,128,128,0.08)",
   },
-  label: { fontSize: 16, opacity: 0.7, flex: 1 },
-  info: { fontSize: 16, fontWeight: "500", flex: 2, textAlign: "right" },
+  infoIcon: {
+    marginRight: 12,
+    width: 20,
+    textAlign: "center",
+  },
+  label: {
+    fontSize: 16,
+    opacity: 0.7,
+    width: 90,
+  },
+  info: {
+    fontSize: 16,
+    fontWeight: "500",
+    flex: 1,
+    textAlign: "right",
+  },
   input: {
     fontSize: 16,
     fontWeight: "500",
-    flex: 2,
+    flex: 1,
     textAlign: "right",
-    padding: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
   },
   selectorButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 8,
+    paddingVertical: 8,
     minHeight: 36,
   },
   selectorText: {
     fontSize: 16,
     fontWeight: "500",
     marginRight: 4,
-    maxWidth: 180,
     textAlign: "right",
+    flexShrink: 1,
   },
   selectorActivity: {
     marginRight: 8,
@@ -514,12 +613,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     marginTop: 20,
+    paddingTop: 10,
   },
   saveButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
     alignItems: "center",
+    minWidth: 80,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   cancelButton: {
     paddingVertical: 10,
@@ -533,26 +637,37 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
+  logoutButton: {
+    padding: 15,
+    borderRadius: 12,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
   buttonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
-  logoutButton: { padding: 15, borderRadius: 12, alignItems: "center" },
+  // Estilos de Modal (mantidos para o modal de curso)
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
-    paddingHorizontal: 24,
+    padding: 24,
   },
   modalContainer: {
     borderRadius: 16,
-    maxHeight: "70%",
+    maxHeight: "80%",
     paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
+    overflow: "hidden",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-    paddingHorizontal: 4,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(128,128,128,0.1)",
+    paddingHorizontal: 16,
   },
   modalTitle: {
     fontSize: 18,
@@ -561,11 +676,10 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     padding: 4,
   },
-  modalContent: {
-    maxHeight: 320,
-  },
+  modalContent: {},
   modalContentContainer: {
-    paddingBottom: 8,
+    paddingBottom: 16,
+    paddingHorizontal: 12,
   },
   modalOption: {
     paddingVertical: 12,
@@ -586,5 +700,6 @@ const styles = StyleSheet.create({
   modalEmptyText: {
     fontSize: 16,
     textAlign: "center",
+    paddingVertical: 20,
   },
 });

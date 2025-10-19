@@ -1,41 +1,79 @@
-import { EventsByDate } from "@/app/(user)/agenda";
+// components/agenda/AgendaListView.tsx
+import { Event, EventsByDate } from "@/app/(user)/agenda";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { formatDuration, formatHeaderTitle } from "@/lib/dateUtils";
-import React, { useMemo } from "react";
-import { SectionList, StyleSheet, TouchableOpacity, View } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons"; // Importar ícones
+import React, { forwardRef, useMemo } from "react";
+import {
+  SectionList,
+  SectionListProps,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 type AgendaListViewProps = {
   events: EventsByDate;
   onDeleteEvent: (eventId: string) => void;
-};
+  todayString: string; // Data de hoje no formato YYYY-MM-DD
+} & Pick<
+  SectionListProps<Event>,
+  "ListHeaderComponent" | "stickySectionHeadersEnabled"
+>;
 
-export const AgendaListView = ({
-  events,
-  onDeleteEvent,
-}: AgendaListViewProps) => {
+export const AgendaListView = forwardRef<
+  SectionList<Event>,
+  AgendaListViewProps
+>(({ events, onDeleteEvent, todayString, ...sectionListProps }, ref) => {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 
   const sections = useMemo(() => {
-    const sortedDates = Object.keys(events).sort();
-    return sortedDates.map((date) => ({
+    // Pega todas as datas que têm eventos
+    const datesWithEvents = Object.keys(events);
+    // Cria um Set para garantir datas únicas e adiciona 'hoje'
+    const allDatesSet = new Set(datesWithEvents);
+    allDatesSet.add(todayString); // Garante que 'hoje' esteja no Set
+
+    // Converte o Set de volta para array e ordena
+    const allSortedDates = Array.from(allDatesSet).sort();
+
+    // Mapeia para o formato de sections, garantindo 'data' como array vazio se não houver eventos
+    return allSortedDates.map((date) => ({
       title: date,
-      data: events[date],
+      data: events[date] || [], // Usa array vazio se events[date] for undefined
     }));
-  }, [events]);
+  }, [events, todayString]); // Depende dos eventos e de 'hoje'
 
   return (
     <SectionList
+      ref={ref}
       sections={sections}
-      keyExtractor={(item) => item.id}
+      keyExtractor={(item, index) => item.id + index} // Chave mais robusta
       stickySectionHeadersEnabled={false}
-      contentContainerStyle={{ paddingHorizontal: 20 }}
-      renderSectionHeader={({ section: { title } }) => (
-        <ThemedText style={styles.sectionHeader}>
-          {formatHeaderTitle(title)}
-        </ThemedText>
+      contentContainerStyle={styles.listContentContainer}
+      renderSectionHeader={(
+        { section: { title, data } } // Pega 'data' para checar se está vazio
+      ) => (
+        <View style={styles.sectionHeaderContainer}>
+          <ThemedText
+            style={[
+              styles.sectionHeader,
+              title === todayString && styles.todayHeader, // Estilo para hoje
+              data.length === 0 && styles.emptySectionHeader, // Estilo para seção vazia
+            ]}
+          >
+            {formatHeaderTitle(title)}
+          </ThemedText>
+          {/* Mostra mensagem se a seção estiver vazia E NÃO for o ListEmptyComponent geral */}
+          {data.length === 0 && sections.length > 0 && (
+            <ThemedText style={styles.emptySectionText}>
+              Nenhum evento para este dia.
+            </ThemedText>
+          )}
+        </View>
       )}
       renderItem={({ item }) => (
         <TouchableOpacity
@@ -45,6 +83,7 @@ export const AgendaListView = ({
             { backgroundColor: themeColors.card },
           ]}
         >
+          {/* ... Conteúdo do item (inalterado) ... */}
           <View style={styles.eventTimeDetails}>
             <ThemedText style={styles.agendaEventTime}>{item.time}</ThemedText>
             <ThemedText style={styles.agendaEventDuration}>
@@ -58,27 +97,61 @@ export const AgendaListView = ({
             ]}
           />
           <View style={styles.agendaEventTitleContainer}>
-            <ThemedText style={styles.agendaEventTitle}>
+            <ThemedText style={styles.agendaEventTitle} numberOfLines={2}>
               {item.title}
             </ThemedText>
           </View>
         </TouchableOpacity>
       )}
       ListEmptyComponent={
-        <ThemedText style={styles.noEventsText}>
-          Nenhum evento agendado.
-        </ThemedText>
+        // Mostrado apenas se 'sections' estiver totalmente vazio
+        <View style={styles.emptyContainer}>
+          <MaterialIcons
+            name="event-busy"
+            size={40}
+            color={themeColors.icon + "80"}
+          />
+          <ThemedText style={styles.noEventsText}>
+            Nenhum evento agendado.
+          </ThemedText>
+        </View>
       }
+      {...sectionListProps}
     />
   );
-};
+});
+
+AgendaListView.displayName = "AgendaListView";
 
 const styles = StyleSheet.create({
+  listContentContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    flexGrow: 1, // Permite que ListEmptyComponent centralize
+  },
+  sectionHeaderContainer: {
+    // Container para o header e texto de seção vazia
+    // backgroundColor: 'transparent', // Garante fundo transparente
+  },
   sectionHeader: {
     fontSize: 18,
     fontWeight: "bold",
-    paddingVertical: 15,
     paddingTop: 25,
+    paddingBottom: 8, // Menos padding embaixo para acomodar texto vazio
+  },
+  todayHeader: {
+    color: Colors.light.tint, // Destaca o header de hoje
+  },
+  emptySectionHeader: {
+    opacity: 0.8, // Header de dia vazio um pouco mais sutil (opcional)
+  },
+  emptySectionText: {
+    // Texto mostrado abaixo do header se a seção estiver vazia
+    fontSize: 14,
+    opacity: 0.6,
+    fontStyle: "italic",
+    paddingBottom: 15, // Espaço abaixo do texto
+    // paddingLeft: 5, // Pequeno indent
   },
   agendaEventItem: {
     flexDirection: "row",
@@ -86,21 +159,47 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
     padding: 16,
-    elevation: 1,
     shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 2,
+    elevation: 1,
   },
-  eventTimeDetails: { width: 70, alignItems: "flex-start" },
-  agendaEventTime: { fontSize: 16, fontWeight: "bold" },
-  agendaEventDuration: { fontSize: 12, opacity: 0.7 },
-  eventTitleBar: { width: 4, height: "100%", borderRadius: 2, marginRight: 12 },
-  agendaEventTitleContainer: { flex: 1 },
-  agendaEventTitle: { fontSize: 16 },
+  eventTimeDetails: {
+    width: 65,
+    alignItems: "flex-start",
+  },
+  agendaEventTime: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  agendaEventDuration: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 2,
+  },
+  eventTitleBar: {
+    width: 4,
+    height: "80%",
+    borderRadius: 2,
+    marginRight: 12,
+    alignSelf: "center",
+  },
+  agendaEventTitleContainer: {
+    flex: 1,
+  },
+  agendaEventTitle: {
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1, // Ocupa espaço
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200, // Altura mínima para centralizar bem
+  },
   noEventsText: {
     textAlign: "center",
-    marginTop: 50,
+    marginTop: 15,
     fontSize: 16,
     opacity: 0.7,
   },
