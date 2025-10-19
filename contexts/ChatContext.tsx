@@ -45,7 +45,9 @@ interface ChatContextType {
     conversationId: string,
     updater: (messages: ChatMessage[]) => ChatMessage[]
   ) => void;
-  getChatModel: () => ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
+  getChatModel: (
+    options?: { systemInstruction?: string }
+  ) => ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -92,11 +94,15 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     return new GoogleGenerativeAI(apiKey);
   }, []);
 
-  const getChatModel = useCallback(() => {
-    return genAIInstance.getGenerativeModel({
-      model: "gemini-2.0-flash", // Ou outro modelo desejado
-    });
-  }, [genAIInstance]);
+  const getChatModel = useCallback(
+    (options?: { systemInstruction?: string }) => {
+      return genAIInstance.getGenerativeModel({
+        model: "gemini-2.0-flash", // Ou outro modelo desejado
+        systemInstruction: options?.systemInstruction,
+      });
+    },
+    [genAIInstance]
+  );
 
   // Carregar estado do AsyncStorage
   useEffect(() => {

@@ -36,6 +36,9 @@ const generationConfig = {
   responseMimeType: "text/plain",
 };
 
+const SYSTEM_INSTRUCTION =
+  "Você é um tutor experiente preparando estudantes brasileiros para vestibulares FUVEST e ENEM. Dê explicações claras, cite exemplos do contexto acadêmico, incentive métodos de estudo ativos e responda sempre em português.";
+
 export default function ChatScreen() {
   const {
     selectedConversation,
@@ -269,7 +272,9 @@ export default function ChatScreen() {
     answer: string
   ): Promise<string[]> => {
     // ...(lógica inalterada)...
-    const model = getChatModel(); // Obtém o modelo do contexto
+    const model = getChatModel({
+      systemInstruction: SYSTEM_INSTRUCTION,
+    }); // Obtém o modelo do contexto
     if (!model) return []; // Retorna vazio se o modelo não estiver disponível
 
     try {
@@ -280,7 +285,7 @@ export default function ChatScreen() {
             parts: [
               {
                 // Prompt aprimorado para garantir JSON
-                text: `Given the last user question and the assistant's answer, suggest exactly 3 concise follow-up questions in Portuguese that the user might ask next to continue the conversation productively. Format the response ONLY as a valid JSON array of strings, like ["Question 1?", "Question 2?", "Question 3?"]. Do not include any other text before or after the JSON array.
+                text: `Given the last user question and the assistant's answer, suggest exactly 3 concise follow-up questions in Portuguese that the user might ask next to continue the conversation productively focused on the FUVEST or ENEM. Format the response ONLY as a valid JSON array of strings, like ["Question 1?", "Question 2?", "Question 3?"]. Do not include any other text before or after the JSON array.
 
 User Question: "${previousQuestion}"
 Assistant Answer: "${answer}"
@@ -310,7 +315,9 @@ Follow-up suggestions (JSON array only):`,
     // ...(lógica inalterada)...
     if (!canSendMessage || !selectedConversation) return;
 
-    const model = getChatModel(); // Obtém o modelo do contexto
+    const model = getChatModel({
+      systemInstruction: SYSTEM_INSTRUCTION,
+    }); // Obtém o modelo do contexto
     if (!model) {
       Alert.alert("Erro", "Não foi possível inicializar o modelo de IA.");
       return;
