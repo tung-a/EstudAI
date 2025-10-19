@@ -1,3 +1,4 @@
+// components/agenda/AddEventModal.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
@@ -12,14 +13,14 @@ import {
   Alert,
   FlatList, // Usar FlatList para disciplinas
   KeyboardAvoidingView,
-  Modal,
+  Modal, // Manter o Modal principal
   Platform,
   StyleSheet,
   Switch, // Importar Switch
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View, // Manter View
 } from "react-native";
 
 type AddEventModalProps = {
@@ -57,10 +58,11 @@ export const AddEventModal = ({
   const [selectedDisciplina, setSelectedDisciplina] = useState<string | null>(
     null
   );
-  const [recommendContent, setRecommendContent] = useState(false); // Novo estado
-  const [disciplinas, setDisciplinas] = useState<string[]>([]); // Lista de disciplinas
+  const [recommendContent, setRecommendContent] = useState(false);
+  const [disciplinas, setDisciplinas] = useState<string[]>([]);
   const [disciplinasLoading, setDisciplinasLoading] = useState(false);
-  const [disciplinaModalVisible, setDisciplinaModalVisible] = useState(false); // Modal para disciplinas
+  // Renomear o estado de visibilidade da lista
+  const [showDisciplinaList, setShowDisciplinaList] = useState(false); // <--- RENOMEADO
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
@@ -102,7 +104,7 @@ export const AddEventModal = ({
   }, []);
 
   const handleSave = () => {
-    // Validações existentes
+    // Validações
     if (!eventTitle || !eventTime || !eventDuration) {
       Alert.alert("Erro", "Preencha título, horário e duração.");
       return;
@@ -117,8 +119,6 @@ export const AddEventModal = ({
       Alert.alert("Duração Inválida", "Insira um número de minutos válido.");
       return;
     }
-
-    // Nova validação: disciplina necessária se recomendação estiver ativa
     if (recommendContent && !selectedDisciplina) {
       Alert.alert(
         "Disciplina Necessária",
@@ -127,12 +127,13 @@ export const AddEventModal = ({
       return;
     }
 
+    setShowDisciplinaList(false); // Fecha a lista se estiver aberta
     onAddEvent({
       title: eventTitle,
       time: eventTime,
       duration: duration,
-      disciplina: selectedDisciplina || undefined, // Passa a disciplina (ou undefined)
-      recommend: recommendContent, // Passa a flag
+      disciplina: selectedDisciplina || undefined,
+      recommend: recommendContent,
     });
     // Limpa os campos após salvar
     setEventTitle("");
@@ -144,11 +145,12 @@ export const AddEventModal = ({
 
   const handleSelectDisciplina = (disciplina: string) => {
     setSelectedDisciplina(disciplina);
-    setDisciplinaModalVisible(false);
+    setShowDisciplinaList(false); // Fecha a lista após selecionar
   };
 
-  // Limpa campos ao fechar o modal principal
+  // Atualizar o handler de fechar o modal principal
   const handleCloseModal = () => {
+    setShowDisciplinaList(false); // Garante que a lista fecha também
     setEventTitle("");
     setEventTime("");
     setEventDuration("");
@@ -157,269 +159,331 @@ export const AddEventModal = ({
     onClose();
   };
 
+  // Função para lidar com a mudança do Switch
+  const handleRecommendSwitchChange = (value: boolean) => {
+    setRecommendContent(value);
+    // Se o switch for desativado, limpa a disciplina selecionada
+    if (!value) {
+      setSelectedDisciplina(null);
+    }
+  };
+
   return (
-    <>
-      <Modal
-        animationType="fade"
-        transparent
-        visible={isVisible}
-        onRequestClose={handleCloseModal} // Usar handleCloseModal
+    // Modal Principal
+    <Modal
+      animationType="fade"
+      transparent
+      visible={isVisible}
+      onRequestClose={handleCloseModal} // Usa o handler atualizado
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalBackdrop}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalBackdrop}
+        <ThemedView
+          style={[
+            styles.modalContent,
+            { backgroundColor: themeColors.background },
+          ]}
+          // onStartShouldSetResponder pode ser removido agora
         >
-          <ThemedView
-            style={[
-              styles.modalContent,
-              { backgroundColor: themeColors.background },
-            ]}
-          >
-            <ThemedText type="subtitle">Adicionar Evento</ThemedText>
-            <ThemedText style={styles.modalDateText}>
-              {formatHeaderTitle(selectedDate)}
-            </ThemedText>
-
-            <TextInput
-              placeholder="Título do Evento (ex: Estudar Matemática)"
-              style={[
-                styles.input,
-                {
-                  color: themeColors.text,
-                  borderColor: themeColors.icon,
-                  backgroundColor: themeColors.card,
-                },
-              ]}
-              placeholderTextColor={themeColors.icon}
-              value={eventTitle}
-              onChangeText={setEventTitle}
-            />
-            <View style={styles.timeRow}>
-              <TextInput
-                placeholder="Horário (HH:MM)"
-                style={[
-                  styles.input,
-                  styles.timeInput, // Estilo específico
-                  {
-                    color: themeColors.text,
-                    borderColor: themeColors.icon,
-                    backgroundColor: themeColors.card,
-                  },
-                ]}
-                placeholderTextColor={themeColors.icon}
-                value={eventTime}
-                onChangeText={setEventTime}
-                keyboardType="numeric"
-                maxLength={5}
-              />
-              <TextInput
-                placeholder="Duração (min)"
-                style={[
-                  styles.input,
-                  styles.timeInput, // Estilo específico
-                  {
-                    color: themeColors.text,
-                    borderColor: themeColors.icon,
-                    backgroundColor: themeColors.card,
-                    marginLeft: 10,
-                  },
-                ]}
-                placeholderTextColor={themeColors.icon}
-                value={eventDuration}
-                onChangeText={setEventDuration}
-                keyboardType="numeric"
-              />
-            </View>
-
-            {/* Seletor de Disciplina */}
-            <TouchableOpacity
-              style={[
-                styles.selectorButton,
-                {
-                  borderColor: themeColors.icon,
-                  backgroundColor: themeColors.card,
-                  opacity: disciplinasLoading ? 0.6 : 1,
-                },
-              ]}
-              onPress={() => setDisciplinaModalVisible(true)}
-              disabled={disciplinasLoading}
-            >
-              {disciplinasLoading ? (
-                <ActivityIndicator
-                  size="small"
-                  color={themeColors.accent}
-                  style={styles.selectorActivity}
-                />
-              ) : (
-                <Text
-                  style={[
-                    styles.selectorText,
-                    {
-                      color: selectedDisciplina
-                        ? themeColors.text
-                        : themeColors.icon,
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {selectedDisciplina || "Selecionar Disciplina (opcional)"}
+          {/* Renderização Condicional: Lista OU Formulário */}
+          {showDisciplinaList ? (
+            // ----- Visualização da Lista de Disciplinas -----
+            <View style={styles.inlineListContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: themeColors.text }]}>
+                  Escolha a Disciplina
                 </Text>
-              )}
-              <MaterialIcons
-                name="arrow-drop-down"
-                size={24}
-                color={themeColors.icon}
-              />
-            </TouchableOpacity>
-
-            {/* Switch para Recomendar */}
-            <View style={styles.switchContainer}>
-              <ThemedText>Sugerir tópicos de estudo?</ThemedText>
-              <Switch
-                value={recommendContent}
-                onValueChange={setRecommendContent}
-                trackColor={{ false: "#767577", true: themeColors.accent }}
-                thumbColor={
-                  Platform.OS === "android"
-                    ? recommendContent
-                      ? themeColors.accent
-                      : "#f4f3f4"
-                    : "#f4f3f4"
-                }
-                ios_backgroundColor="#3e3e3e"
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: themeColors.accent }]}
-              onPress={handleSave}
-            >
-              <Text style={styles.buttonText}>Salvar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.cancelButton]}
-              onPress={handleCloseModal} // Usar handleCloseModal
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-          </ThemedView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Modal para Selecionar Disciplina */}
-      <Modal
-        visible={disciplinaModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDisciplinaModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContainer,
-              { backgroundColor: themeColors.card },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: themeColors.text }]}>
-                Escolha a Disciplina
-              </Text>
-              <TouchableOpacity
-                onPress={() => setDisciplinaModalVisible(false)}
-                style={styles.modalCloseButton}
-              >
-                <MaterialIcons
-                  name="close"
-                  size={22}
-                  color={themeColors.icon}
-                />
-              </TouchableOpacity>
-            </View>
-            {disciplinasLoading ? (
-              <View style={styles.modalLoaderContainer}>
-                <ActivityIndicator size="large" color={themeColors.accent} />
+                <TouchableOpacity
+                  onPress={() => setShowDisciplinaList(false)} // Botão para fechar a lista
+                  style={styles.modalCloseButton}
+                >
+                  <MaterialIcons
+                    name="close"
+                    size={22}
+                    color={themeColors.icon}
+                  />
+                </TouchableOpacity>
               </View>
-            ) : (
-              <FlatList
-                data={disciplinas}
-                keyExtractor={(item) => item}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.modalOption,
-                      {
-                        borderColor: themeColors.icon + "50",
-                        backgroundColor:
-                          selectedDisciplina === item
-                            ? themeColors.accent
-                            : "transparent",
-                      },
-                    ]}
-                    onPress={() => handleSelectDisciplina(item)}
-                  >
-                    <Text
+              {disciplinasLoading ? (
+                <View style={styles.modalLoaderContainer}>
+                  <ActivityIndicator size="large" color={themeColors.accent} />
+                </View>
+              ) : (
+                <FlatList
+                  data={disciplinas}
+                  keyExtractor={(item) => item}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
                       style={[
-                        styles.modalOptionText,
+                        styles.modalOption, // Reutiliza estilo
                         {
-                          color:
-                            selectedDisciplina === item
-                              ? "#FFFFFF"
-                              : themeColors.text,
+                          borderColor: themeColors.icon + "50",
+                          backgroundColor:
+                            selectedDisciplina === item // Usa selectedDisciplina aqui para destacar
+                              ? themeColors.accent
+                              : "transparent",
                         },
                       ]}
+                      onPress={() => handleSelectDisciplina(item)}
                     >
-                      {item}
+                      <Text
+                        style={[
+                          styles.modalOptionText, // Reutiliza estilo
+                          {
+                            color:
+                              selectedDisciplina === item // Usa selectedDisciplina
+                                ? "#FFFFFF"
+                                : themeColors.text,
+                          },
+                        ]}
+                      >
+                        {item}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={
+                    <Text
+                      style={[
+                        styles.modalEmptyText,
+                        { color: themeColors.icon },
+                      ]}
+                    >
+                      Nenhuma disciplina encontrada.
                     </Text>
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text
-                    style={[styles.modalEmptyText, { color: themeColors.icon }]}
-                  >
-                    Nenhuma disciplina encontrada.
-                  </Text>
-                }
-                style={styles.modalContentList}
-                contentContainerStyle={styles.modalContentContainer}
+                  }
+                  style={styles.modalContentList} // Reutiliza estilo
+                  contentContainerStyle={styles.modalContentContainer} // Reutiliza estilo
+                />
+              )}
+            </View>
+          ) : (
+            // ----- Formulário Original -----
+            <>
+              <ThemedText type="subtitle">Adicionar Evento</ThemedText>
+              <ThemedText style={styles.modalDateText}>
+                {formatHeaderTitle(selectedDate)}
+              </ThemedText>
+              {/* Input Título */}
+              <TextInput
+                placeholder="Título do Evento (ex: Estudar Matemática)"
+                style={[
+                  styles.input,
+                  {
+                    color: themeColors.text,
+                    borderColor: themeColors.icon,
+                    backgroundColor: themeColors.card,
+                  },
+                ]}
+                placeholderTextColor={themeColors.icon}
+                value={eventTitle}
+                onChangeText={setEventTitle}
               />
-            )}
-          </View>
-        </View>
-      </Modal>
-    </>
+              {/* Inputs Horário e Duração */}
+              <View style={styles.timeRow}>
+                <TextInput
+                  placeholder="Horário (HH:MM)"
+                  style={[
+                    styles.input,
+                    styles.timeInput,
+                    {
+                      color: themeColors.text,
+                      borderColor: themeColors.icon,
+                      backgroundColor: themeColors.card,
+                    },
+                  ]}
+                  placeholderTextColor={themeColors.icon}
+                  value={eventTime}
+                  onChangeText={setEventTime}
+                  keyboardType="numbers-and-punctuation" // <-- Correção mantida
+                  maxLength={5}
+                />
+                <TextInput
+                  placeholder="Duração (min)"
+                  style={[
+                    styles.input,
+                    styles.timeInput,
+                    {
+                      color: themeColors.text,
+                      borderColor: themeColors.icon,
+                      backgroundColor: themeColors.card,
+                      marginLeft: 10,
+                    },
+                  ]}
+                  placeholderTextColor={themeColors.icon}
+                  value={eventDuration}
+                  onChangeText={setEventDuration}
+                  keyboardType="numeric"
+                />
+              </View>
+              {/* Switch para Recomendar */}
+              <View style={styles.switchContainer}>
+                <ThemedText>Sugerir tópicos de estudo?</ThemedText>
+                <Switch
+                  value={recommendContent}
+                  // Usa o novo handler que também limpa a disciplina
+                  onValueChange={handleRecommendSwitchChange} // <-- ALTERADO AQUI
+                  trackColor={{ false: "#767577", true: themeColors.accent }}
+                  thumbColor={
+                    Platform.OS === "android"
+                      ? recommendContent
+                        ? themeColors.accent
+                        : "#f4f3f4"
+                      : "#f4f3f4"
+                  }
+                  ios_backgroundColor="#3e3e3e"
+                />
+              </View>
+              {/* Botão Seletor de Disciplina (CONDICIONAL) */}
+              {recommendContent && ( // <--- ADICIONADA CONDIÇÃO AQUI
+                <TouchableOpacity
+                  style={[
+                    styles.selectorButton,
+                    {
+                      borderColor: themeColors.icon,
+                      backgroundColor: themeColors.card,
+                      opacity: disciplinasLoading ? 0.6 : 1,
+                    },
+                  ]}
+                  onPress={() => setShowDisciplinaList(true)}
+                  disabled={disciplinasLoading}
+                >
+                  {disciplinasLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={themeColors.accent}
+                      style={styles.selectorActivity}
+                    />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.selectorText,
+                        {
+                          color: selectedDisciplina
+                            ? themeColors.text
+                            : themeColors.icon,
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {selectedDisciplina || "Selecionar Disciplina"}{" "}
+                      {/* Removido (opcional) */}
+                    </Text>
+                  )}
+                  <MaterialIcons
+                    name="arrow-drop-down"
+                    size={24}
+                    color={themeColors.icon}
+                  />
+                </TouchableOpacity>
+              )}{" "}
+              {/* <--- FIM DA CONDIÇÃO */}
+              {/* Botões Salvar/Cancelar */}
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.accent }]}
+                onPress={handleSave}
+              >
+                <Text style={styles.buttonText}>Salvar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={handleCloseModal}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ThemedView>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 };
 
+// Estilos
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)", // Fundo mais escuro
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   modalContent: {
     width: "90%",
     padding: 20,
-    borderRadius: 15, // Mais arredondado
+    borderRadius: 15,
     alignItems: "center",
-    shadowColor: "#000", // Sombra
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
   },
+  inlineListContainer: {
+    // Novo estilo para o container da lista
+    width: "100%",
+    maxHeight: 400, // Ajuste conforme necessário
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(128,128,128,0.1)",
+    paddingHorizontal: 16, // Padding horizontal no header
+    width: "100%", // Para ocupar a largura
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalLoaderContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 180, // Garante espaço para o loader
+    padding: 16, // Padding interno
+  },
+  modalContentList: {
+    width: "100%", // Para o FlatList ocupar a largura
+  },
+  modalContentContainer: {
+    paddingBottom: 16,
+    paddingHorizontal: 12, // Padding para os itens da lista
+  },
+  modalOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  modalEmptyText: {
+    fontSize: 16,
+    textAlign: "center",
+    paddingVertical: 20,
+    opacity: 0.7,
+  },
   modalDateText: {
     fontSize: 16,
     opacity: 0.8,
-    marginBottom: 20, // Mais espaço
+    marginBottom: 20,
     fontWeight: "500",
   },
   input: {
     width: "100%",
     height: 50,
     borderWidth: 1,
-    borderRadius: 10, // Menos arredondado que o modal
-    marginVertical: 8, // Ajuste vertical
+    borderRadius: 10,
+    marginVertical: 8,
     paddingHorizontal: 15,
     fontSize: 16,
   },
@@ -429,7 +493,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   timeInput: {
-    flex: 1, // Divide o espaço igualmente
+    flex: 1,
   },
   selectorButton: {
     width: "100%",
@@ -455,15 +519,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     width: "100%",
-    marginVertical: 15, // Espaçamento
+    marginVertical: 15,
     paddingHorizontal: 5,
   },
   button: {
-    paddingVertical: 14, // Altura do botão
+    paddingVertical: 14,
     borderRadius: 10,
     width: "100%",
     alignItems: "center",
-    marginTop: 15, // Espaço acima
+    marginTop: 15,
   },
   buttonText: {
     color: "#FFFFFF",
@@ -471,76 +535,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   cancelButton: {
-    backgroundColor: "transparent", // Fundo transparente
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Colors.light.destructive, // Cor destrutiva (ajustar para themeColors se necessário)
+    borderColor: Colors.light.destructive, // Pode precisar ajustar para themeColors
     marginTop: 10,
   },
   cancelButtonText: {
-    color: Colors.light.destructive, // Cor destrutiva
+    color: Colors.light.destructive, // Pode precisar ajustar para themeColors
     fontWeight: "bold",
     fontSize: 16,
-  },
-  // Estilos para o Modal de Seleção de Disciplina
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalContainer: {
-    borderRadius: 16,
-    maxHeight: "80%", // Limita altura
-    paddingTop: 16, // Padding só no topo inicialmente
-    overflow: "hidden", // Garante bordas arredondadas
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128,128,128,0.1)",
-    paddingHorizontal: 16, // Padding horizontal no header
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalContentList: {
-    // Estilo para o FlatList/ScrollView
-    maxHeight: 400, // Altura máxima para scroll
-  },
-  modalContentContainer: {
-    // Padding para o conteúdo da lista
-    paddingBottom: 16,
-    paddingHorizontal: 12,
-  },
-  modalOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  modalOptionText: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  modalLoaderContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 180, // Garante espaço para o loader
-    padding: 16, // Padding interno
-  },
-  modalEmptyText: {
-    fontSize: 16,
-    textAlign: "center",
-    paddingVertical: 20,
-    opacity: 0.7,
   },
 });

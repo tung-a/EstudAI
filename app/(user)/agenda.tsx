@@ -16,19 +16,27 @@ import {
   query,
   serverTimestamp,
   Timestamp,
-  updateDoc
+  updateDoc,
 } from "firebase/firestore";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"; // Importar React
 import {
   ActivityIndicator,
-  Alert,
-  Button, // Importar Button
+  Alert, // Importar Button
+  Modal, // <-- Adicionado Modal
+  ScrollView, // <-- Adicionado ScrollView
   SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import Markdown, { MarkdownNode } from "react-native-markdown-display"; // <-- Importado Markdown e MarkdownNode
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AddEventModal } from "@/components/agenda/AddEventModal";
@@ -99,9 +107,9 @@ export default function AgendaScreen() {
     string,
     number
   > | null>(null); // Estado para prioridades
-  const [recommendationResult, setRecommendationResult] = useState<string | null>(
-    null
-  ); // Estado para exibir recomendação
+  const [recommendationResult, setRecommendationResult] = useState<
+    string | null
+  >(null); // Estado para exibir recomendação
   const [recommendationLoading, setRecommendationLoading] = useState(false); // Loading para recomendação
 
   const colorScheme = useColorScheme() ?? "light";
@@ -188,11 +196,10 @@ export default function AgendaScreen() {
 
     // Só inicia o loading de eventos se os dados do usuário já foram (ou tentaram ser) carregados
     if (userProfile !== undefined && coursePriorities !== undefined) {
-        setLoading(true);
+      setLoading(true);
     } else {
-        return; // Espera userProfile e coursePriorities serem definidos (null ou objeto)
+      return; // Espera userProfile e coursePriorities serem definidos (null ou objeto)
     }
-
 
     const q = query(
       collection(db, "users", currentUser.uid, "events"),
@@ -255,7 +262,9 @@ export default function AgendaScreen() {
   // --- Função para buscar recomendações ---
   const generateStudyRecommendations = useCallback(
     async (disciplina: string, duration: number) => {
-      console.log(`Buscando recomendações para ${disciplina} por ${duration} min.`);
+      console.log(
+        `Buscando recomendações para ${disciplina} por ${duration} min.`
+      );
       setRecommendationLoading(true);
       setRecommendationResult(null); // Limpa resultado anterior
 
@@ -263,7 +272,8 @@ export default function AgendaScreen() {
         const userGoal = userProfile?.goal || "Outro";
         const priorities = coursePriorities;
         const normalizedDisciplinaId = normalizeDocId(disciplina);
-        let competenciasTexto = "Conteúdo específico da disciplina não encontrado.";
+        let competenciasTexto =
+          "Conteúdo específico da disciplina não encontrado.";
 
         if (normalizedDisciplinaId) {
           const disciplinaDocSnap = await getDoc(
@@ -283,14 +293,17 @@ export default function AgendaScreen() {
               .join("\n\n");
             // Limitar tamanho para não exceder limites do prompt
             if (competenciasTexto.length > 1500) {
-                 competenciasTexto = competenciasTexto.substring(0, 1500) + "... (mais conteúdo disponível)";
+              competenciasTexto =
+                competenciasTexto.substring(0, 1500) +
+                "... (mais conteúdo disponível)";
             }
           }
         }
 
         // Usa normalizeDocId também para buscar a prioridade
         const normalizedPrioKey = normalizeDocId(disciplina);
-        const prioridade = (normalizedPrioKey && priorities?.[normalizedPrioKey]) || 2; // Default 2 (média)
+        const prioridade =
+          (normalizedPrioKey && priorities?.[normalizedPrioKey]) || 2; // Default 2 (média)
 
         const promptSegments: string[] = [
           `Monte um plano de estudo para ${disciplina} com duração total de ${duration} minutos, pensado para o vestibular de ${userGoal}.`,
@@ -298,13 +311,22 @@ export default function AgendaScreen() {
           `Após escolher o conteúdo, selecione um recorte específico (um único conceito, tema ou acontecimento) e foque somente nele; não liste vários tópicos amplos na mesma etapa.`,
           `Prefira instruções concretas sobre o que fazer naquele recorte (ex.: responder 3 questões sobre "Era Vargas" de um vestibular recente, mapear causa e consequência de um evento, resumir um parágrafo do autor X).`,
           `Garanta que a soma dos tempos de todas as etapas seja exatamente ${duration} minutos; nunca ofereça etapas que individualmente usem ${duration} minutos ou ultrapassem esse total, mesmo ao adicionar esse tempo extra de preparação.`,
-          `Escreva cada item no formato "XX min – atividade" para deixar claro o tempo reservado.` ,
+          `Escreva cada item no formato "XX min – atividade" para deixar claro o tempo reservado.`,
           `Formate como uma lista numerada simples, sem introdução ou conclusão.`,
-          `A prioridade dessa matéria para este curso é considerada ${prioridade === 3 ? "alta" : prioridade === 2 ? "média" : "baixa"}.`,
+          `A prioridade dessa matéria para este curso é considerada ${
+            prioridade === 3 ? "alta" : prioridade === 2 ? "média" : "baixa"
+          }.`,
         ];
 
-        if (competenciasTexto !== "Conteúdo específico da disciplina não encontrado.") {
-          promptSegments.splice(2, 0, `Considere as seguintes competências e habilidades gerais: \n${competenciasTexto}`);
+        if (
+          competenciasTexto !==
+          "Conteúdo específico da disciplina não encontrado."
+        ) {
+          promptSegments.splice(
+            2,
+            0,
+            `Considere as seguintes competências e habilidades gerais: \n${competenciasTexto}`
+          );
         }
 
         const prompt = promptSegments.join(" ");
@@ -338,6 +360,7 @@ export default function AgendaScreen() {
     }) => {
       if (!currentUser) return;
       setRecommendationResult(null); // Limpa recomendações antigas
+      setRecommendationLoading(false); // Garante que o loading comece falso
 
       try {
         const docData: any = {
@@ -351,8 +374,8 @@ export default function AgendaScreen() {
         if (eventData.disciplina) {
           const normalizedDisciplina = normalizeDocId(eventData.disciplina);
           if (normalizedDisciplina) {
-             docData.disciplinaId = normalizedDisciplina; // Salva ID normalizado
-             docData.disciplinaNome = eventData.disciplina; // Salva nome original
+            docData.disciplinaId = normalizedDisciplina; // Salva ID normalizado
+            docData.disciplinaNome = eventData.disciplina; // Salva nome original
           }
         }
 
@@ -366,20 +389,24 @@ export default function AgendaScreen() {
         // Chama recomendação DEPOIS de fechar o modal e salvar
         if (eventData.recommend && eventData.disciplina) {
           const suggestions = await generateStudyRecommendations(
+            // Isso já define recommendationLoading=true
             eventData.disciplina,
             eventData.duration
           );
           if (suggestions) {
             try {
+              // Salva a recomendação no evento
               await updateDoc(docRef, {
                 studyRecommendation: suggestions,
                 recommendationGeneratedAt: serverTimestamp(),
               });
+              // O estado recommendationResult já foi definido dentro de generateStudyRecommendations
             } catch (updateError) {
               console.error(
                 "Erro ao salvar recomendação no evento:",
                 updateError
               );
+              // Mesmo com erro ao salvar no doc, a recomendação foi gerada e está em recommendationResult
             }
           }
         }
@@ -387,6 +414,7 @@ export default function AgendaScreen() {
         console.error("Erro ao adicionar evento:", error);
         Alert.alert("Erro", "Não foi possível salvar o evento.");
         setRecommendationLoading(false); // Garante que loading pare em caso de erro no addDoc
+        setRecommendationResult(null); // Limpa resultado em caso de erro
       }
     },
     [currentUser, selectedDate, generateStudyRecommendations] // Adiciona dependência
@@ -395,99 +423,188 @@ export default function AgendaScreen() {
   // Handler para deletar evento (inalterado)
   const handleDeleteEvent = useCallback(
     async (eventId: string) => {
-      // ... (código existente) ...
       if (!currentUser) return; // Checa usuário
-        Alert.alert(
-          "Confirmar Exclusão",
-          "Tem certeza que deseja excluir este evento?",
-          [
-            { text: "Cancelar", style: "cancel" },
-            {
-              text: "Excluir",
-              style: "destructive",
-              onPress: async () => {
-                try {
-                  await deleteDoc(
-                    doc(db, "users", currentUser.uid, "events", eventId)
-                  ); // Usa currentUser.uid
-                  logDeleteEventCalendar();
-                } catch (error) {
-                  console.error("Erro ao deletar evento: ", error);
-                  Alert.alert("Erro", "Não foi possível excluir o evento.");
-                }
-              },
+      Alert.alert(
+        "Confirmar Exclusão",
+        "Tem certeza que deseja excluir este evento?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Excluir",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteDoc(
+                  doc(db, "users", currentUser.uid, "events", eventId)
+                ); // Usa currentUser.uid
+                logDeleteEventCalendar();
+              } catch (error) {
+                console.error("Erro ao deletar evento: ", error);
+                Alert.alert("Erro", "Não foi possível excluir o evento.");
+              }
             },
-          ]
-        );
+          },
+        ]
+      );
     },
     [currentUser]
   );
 
   // Handler para mudar de semana (inalterado)
   const handleWeekChange = (direction: "prev" | "next") => {
-    // ... (código existente) ...
-      const [year, month, day] = selectedDate.split("-").map(Number);
-      const currentDateObj = new Date(year, month - 1, day);
-      currentDateObj.setDate(
-        currentDateObj.getDate() + (direction === "prev" ? -7 : 7)
-      );
-      setSelectedDate(formatDate(currentDateObj)); // Atualiza a data selecionada
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const currentDateObj = new Date(year, month - 1, day);
+    currentDateObj.setDate(
+      currentDateObj.getDate() + (direction === "prev" ? -7 : 7)
+    );
+    setSelectedDate(formatDate(currentDateObj)); // Atualiza a data selecionada
   };
+
+  // --- Regras para o Markdown com Tipos Corretos e Estilos Explícitos ---
+  const markdownRules = useMemo(
+    () => ({
+      // Regra para **texto** (negrito)
+      strong: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <Text
+          key={node.key}
+          style={{
+            fontWeight: "bold",
+            color: themeColors.text,
+            fontSize: 15, // <- Adicionado explicitamente
+            lineHeight: 22, // <- Adicionado explicitamente
+          }}
+        >
+          {children}
+        </Text>
+      ),
+      // Regra para *texto* (itálico)
+      em: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <Text
+          key={node.key}
+          style={{
+            fontStyle: "italic",
+            color: themeColors.text,
+            fontSize: 15, // <- Adicionado explicitamente
+            lineHeight: 22, // <- Adicionado explicitamente
+          }}
+        >
+          {children}
+        </Text>
+      ),
+      // Regra base para texto
+      text: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <Text
+          key={node.key}
+          style={{ color: themeColors.text, fontSize: 15, lineHeight: 22 }}
+        >
+          {node.content}
+        </Text>
+      ),
+      // Regra para itens de lista
+      list_item: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <View key={node.key} style={styles.listItemStyle}>
+          {/* Adicionado espaço após o marcador */}
+          <Text
+            style={{
+              color: themeColors.text,
+              marginRight: 5,
+              lineHeight: 22,
+              fontSize: 15,
+            }}
+          >
+            {parent.type === "bullet_list" ? "• " : `${node.index + 1}. `}
+          </Text>
+          <View style={{ flex: 1 }}>{children}</View>
+        </View>
+      ),
+      // Regra para parágrafo para garantir espaçamento entre blocos
+      paragraph: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <View key={node.key} style={{ marginTop: 5, marginBottom: 10 }}>
+          {children}
+        </View> // Aumentado marginBottom
+      ),
+    }),
+    [themeColors.text]
+  );
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex} edges={["top", "left", "right"]}>
         {/* Header com botões de toggle e adicionar */}
         <View style={styles.header}>
-            {/* ... (código toggle e botão +) ... */}
-              <View
+          <View
+            style={[
+              styles.viewToggleContainer,
+              { backgroundColor: themeColors.card },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={() => setViewMode("agenda")}
+              style={[
+                styles.toggleButton,
+                viewMode === "agenda" && {
+                  backgroundColor: themeColors.accent,
+                },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.viewToggleContainer,
-                  { backgroundColor: themeColors.card },
+                  styles.toggleButtonText,
+                  { color: viewMode === "agenda" ? "#fff" : themeColors.text },
                 ]}
               >
-                <TouchableOpacity
-                  onPress={() => setViewMode("agenda")}
-                  style={[
-                    styles.toggleButton,
-                    viewMode === "agenda" && {
-                      backgroundColor: themeColors.accent,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.toggleButtonText,
-                      { color: viewMode === "agenda" ? "#fff" : themeColors.text },
-                    ]}
-                  >
-                    Agenda
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setViewMode("day")}
-                  style={[
-                    styles.toggleButton,
-                    viewMode === "day" && { backgroundColor: themeColors.accent },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.toggleButtonText,
-                      { color: viewMode === "day" ? "#fff" : themeColors.text },
-                    ]}
-                  >
-                    Dia
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.addButton, { backgroundColor: themeColors.accent }]}
-                onPress={() => setModalVisible(true)}
+                Agenda
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setViewMode("day")}
+              style={[
+                styles.toggleButton,
+                viewMode === "day" && { backgroundColor: themeColors.accent },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.toggleButtonText,
+                  { color: viewMode === "day" ? "#fff" : themeColors.text },
+                ]}
               >
-                <Text style={styles.addButtonText}>+</Text>
-              </TouchableOpacity>
+                Dia
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: themeColors.accent }]}
+            onPress={() => setModalVisible(true)}
+          >
+            <Text style={styles.addButtonText}>+</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Seletor de Semana */}
@@ -497,22 +614,6 @@ export default function AgendaScreen() {
           onDateSelect={setSelectedDate}
           onWeekChange={handleWeekChange}
         />
-
-         {/* Display de Recomendação */}
-         {recommendationLoading && (
-            <View style={styles.recommendationDisplay}>
-                <ActivityIndicator color={themeColors.accent} />
-                <ThemedText style={styles.recommendationTitle}>Gerando sugestões...</ThemedText>
-            </View>
-         )}
-         {recommendationResult && !recommendationLoading && (
-           <View style={[styles.recommendationDisplay, {backgroundColor: themeColors.card}]}>
-              <ThemedText type="subtitle" style={styles.recommendationTitle}>Sugestões de Estudo:</ThemedText>
-              <ThemedText style={styles.recommendationText}>{recommendationResult}</ThemedText>
-              <Button title="Ok" onPress={() => setRecommendationResult(null)} color={themeColors.accent} />
-           </View>
-         )}
-
 
         {/* Conteúdo Principal (Lista ou Timeline) */}
         <View style={styles.contentContainer}>
@@ -545,6 +646,60 @@ export default function AgendaScreen() {
           onAddEvent={handleAddEvent} // Passa o handleAddEvent atualizado
           selectedDate={selectedDate}
         />
+
+        {/* ----- NOVO Modal para Exibir Recomendação ----- */}
+        <Modal
+          transparent
+          animationType="fade"
+          visible={!!recommendationResult || recommendationLoading} // Visível se estiver carregando ou tiver resultado
+          onRequestClose={() => setRecommendationResult(null)} // Opcional: fechar ao pressionar back
+        >
+          <View style={styles.recommendationModalBackdrop}>
+            <ThemedView
+              lightColor={Colors.light.card}
+              darkColor={Colors.dark.card}
+              style={styles.recommendationModalContent}
+            >
+              {recommendationLoading && (
+                <>
+                  <ActivityIndicator color={themeColors.accent} size="large" />
+                  <ThemedText
+                    style={[styles.recommendationTitle, { marginTop: 15 }]}
+                  >
+                    Gerando sugestões...
+                  </ThemedText>
+                </>
+              )}
+              {recommendationResult && !recommendationLoading && (
+                <>
+                  <ScrollView style={styles.recommendationScrollView}>
+                    <ThemedText
+                      type="subtitle"
+                      style={styles.recommendationTitle}
+                    >
+                      Sugestões de Estudo:
+                    </ThemedText>
+                    {/* ----- USANDO rules EM VEZ DE style ----- */}
+                    <Markdown rules={markdownRules}>
+                      {recommendationResult}
+                    </Markdown>
+                  </ScrollView>
+                  <View style={styles.modalButtonContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.modalOkButton,
+                        { backgroundColor: themeColors.accent },
+                      ]}
+                      onPress={() => setRecommendationResult(null)}
+                    >
+                      <Text style={styles.modalOkButtonText}>Ok</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ThemedView>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ThemedView>
   );
@@ -609,26 +764,57 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // Estilos para display da recomendação
-  recommendationDisplay: {
-      marginHorizontal: 20,
-      marginVertical: 10,
-      padding: 15,
-      borderRadius: 10,
-      // backgroundColor: themeColors.card, // Definido inline para tema
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
-      elevation: 3,
-      gap: 10, // Espaço entre elementos
+  // Estilos para o MODAL da recomendação
+  recommendationModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)", // Fundo escurecido
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 30, // Espaçamento das bordas
+  },
+  recommendationModalContent: {
+    width: "100%",
+    maxHeight: "75%", // Limita a altura máxima
+    borderRadius: 15,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    alignItems: "center", // Centraliza o ActivityIndicator
+  },
+  recommendationScrollView: {
+    // Para permitir scroll do texto longo
+    width: "100%",
+    marginBottom: 15, // Espaço antes do botão
   },
   recommendationTitle: {
-      marginBottom: 5,
-      textAlign: 'center',
+    marginBottom: 15, // Aumenta espaço abaixo do título
+    textAlign: "center",
+    fontWeight: "bold", // Deixa o título em negrito
   },
-  recommendationText: {
-      fontSize: 15,
-      lineHeight: 22,
+  modalButtonContainer: {
+    // Container para o botão OK
+    width: "100%",
+    alignItems: "center", // Centraliza o botão
+    marginTop: 10,
+  },
+  modalOkButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+  },
+  modalOkButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  listItemStyle: {
+    // Estilo para a regra list_item do Markdown
+    flexDirection: "row",
+    marginBottom: 8,
+    // Garante que o texto dentro do item possa quebrar linha
+    flexWrap: "wrap",
   },
 });

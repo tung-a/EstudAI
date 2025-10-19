@@ -2,7 +2,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -27,7 +27,7 @@ export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [todaysEvents, setTodaysEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const navigation = useNavigation();
 
   // Efeito para observar a autenticação do usuário
   useEffect(() => {
@@ -123,7 +123,7 @@ export default function HomeScreen() {
             <ThemedText type="subtitle">Ações Rápidas</ThemedText>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push("/(user)/chat")}
+              onPress={() => navigation.navigate("chat" as never)}
             >
               <ThemedText
                 style={{ color: Colors.light.tint, fontWeight: "bold" }}
@@ -133,7 +133,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push("/(user)/agenda")}
+              onPress={() => navigation.navigate("agenda" as never)}
             >
               <ThemedText
                 style={{ color: Colors.light.tint, fontWeight: "bold" }}

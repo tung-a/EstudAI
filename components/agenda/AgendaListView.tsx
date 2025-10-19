@@ -1,21 +1,28 @@
 // components/agenda/AgendaListView.tsx
-import { Event, EventsByDate } from "@/app/(user)/agenda";
+import { Event } from "@/app/(user)/agenda";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { formatDuration, formatHeaderTitle } from "@/lib/dateUtils";
-import { MaterialIcons } from "@expo/vector-icons"; // Importar ícones
-import { forwardRef, useMemo, useState } from "react";
+import { MaterialIcons } from "@expo/vector-icons";
+import React, { forwardRef, useMemo, useState } from "react";
 import {
   SectionList,
   SectionListProps,
   StyleSheet,
+  Text, // Importar Text
   TouchableOpacity,
   View,
 } from "react-native";
+// Ajuste na importação para incluir tipos necessários para rules
+import Markdown, {
+  MarkdownNode,
+  MarkdownRules,
+  RenderState,
+} from "react-native-markdown-display";
 
 type AgendaListViewProps = {
-  events: EventsByDate;
+  events: { [date: string]: Event[] }; // Tipo EventsByDate inline ou importado
   onDeleteEvent: (eventId: string) => void;
   todayString: string; // Data de hoje no formato YYYY-MM-DD
 } & Pick<
@@ -32,43 +39,143 @@ export const AgendaListView = forwardRef<
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const sections = useMemo(() => {
-    // Pega todas as datas que têm eventos
+    // ... (lógica das seções inalterada) ...
     const datesWithEvents = Object.keys(events);
-    // Cria um Set para garantir datas únicas e adiciona 'hoje'
     const allDatesSet = new Set(datesWithEvents);
-    allDatesSet.add(todayString); // Garante que 'hoje' esteja no Set
-
-    // Converte o Set de volta para array e ordena
+    allDatesSet.add(todayString);
     const allSortedDates = Array.from(allDatesSet).sort();
-
-    // Mapeia para o formato de sections, garantindo 'data' como array vazio se não houver eventos
     return allSortedDates.map((date) => ({
       title: date,
-      data: events[date] || [], // Usa array vazio se events[date] for undefined
+      data: events[date] || [],
     }));
-  }, [events, todayString]); // Depende dos eventos e de 'hoje'
+  }, [events, todayString]);
+
+  // --- Estilo Base Dinâmico para Texto Markdown ---
+  const baseTextStyle = useMemo(
+    () => ({
+      color: themeColors.text,
+      fontSize: 13,
+      lineHeight: 18,
+    }),
+    [themeColors.text]
+  );
+
+  // --- Regras para o Markdown ---
+  // Tipar o objeto de regras com MarkdownRules
+  const markdownRules: MarkdownRules = useMemo(
+    () => ({
+      // Regra para **texto** (negrito)
+      strong: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => (
+        // Aplicar estilo base + negrito
+        <Text key={node.key} style={[baseTextStyle, { fontWeight: "bold" }]}>
+          {children}
+        </Text>
+      ),
+      // Regra para *texto* (itálico)
+      em: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => (
+        // Aplicar estilo base + itálico
+        <Text key={node.key} style={[baseTextStyle, { fontStyle: "italic" }]}>
+          {children}
+        </Text>
+      ),
+      // Regra fundamental para texto puro - APLICA ESTILOS BASE AQUI
+      // Esta regra é crucial para evitar o erro "Text strings must be rendered..."
+      text: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => {
+        // A regra 'text' recebe o conteúdo diretamente em node.content
+        // Não precisa processar 'children' aqui, apenas retornar o <Text> formatado
+        return (
+          <Text key={node.key} style={baseTextStyle}>
+            {String(node.content)} {/* Garante que é string */}
+          </Text>
+        );
+      },
+      // Regra para itens de lista
+      list_item: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => (
+        <View key={node.key} style={styles.listItemStyle}>
+          {/* Marcador usa o estilo base */}
+          <Text style={[baseTextStyle, { marginRight: 5 }]}>
+            {parent.type === "bullet_list"
+              ? "• "
+              : `${node.index != null ? node.index + 1 : 0}. `}
+          </Text>
+          {/* A View contém os children processados por outras regras (incluindo 'text') */}
+          <View style={{ flex: 1 }}>{children}</View>
+        </View>
+      ),
+      // Regra para parágrafo - apenas adiciona margem
+      paragraph: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => (
+        <View key={node.key} style={{ marginBottom: 8 }}>
+          {children}
+        </View>
+      ),
+      // Adiciona regras para as listas apenas para margens
+      bullet_list: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => (
+        <View key={node.key} style={{ marginBottom: 8 }}>
+          {children}
+        </View>
+      ),
+      ordered_list: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        state: RenderState
+      ) => (
+        <View key={node.key} style={{ marginBottom: 8 }}>
+          {children}
+        </View>
+      ),
+    }),
+    [themeColors.text, baseTextStyle]
+  ); // Adicionado baseTextStyle como dependência
 
   return (
     <SectionList
       ref={ref}
       sections={sections}
-      keyExtractor={(item, index) => item.id + index} // Chave mais robusta
+      keyExtractor={(item, index) => item.id + index}
       stickySectionHeadersEnabled={false}
       contentContainerStyle={styles.listContentContainer}
-      renderSectionHeader={(
-        { section: { title, data } } // Pega 'data' para checar se está vazio
-      ) => (
+      renderSectionHeader={({ section: { title, data } }) => (
         <View style={styles.sectionHeaderContainer}>
           <ThemedText
             style={[
               styles.sectionHeader,
-              title === todayString && styles.todayHeader, // Estilo para hoje
-              data.length === 0 && styles.emptySectionHeader, // Estilo para seção vazia
+              title === todayString && styles.todayHeader,
+              data.length === 0 && styles.emptySectionHeader,
             ]}
           >
             {formatHeaderTitle(title)}
           </ThemedText>
-          {/* Mostra mensagem se a seção estiver vazia E NÃO for o ListEmptyComponent geral */}
           {data.length === 0 && sections.length > 0 && (
             <ThemedText style={styles.emptySectionText}>
               Nenhum evento para este dia.
@@ -94,9 +201,12 @@ export const AgendaListView = forwardRef<
               styles.agendaEventItem,
               { backgroundColor: themeColors.card },
             ]}
+            activeOpacity={hasRecommendation ? 0.7 : 1}
           >
             <View style={styles.eventTimeDetails}>
-              <ThemedText style={styles.agendaEventTime}>{item.time}</ThemedText>
+              <ThemedText style={styles.agendaEventTime}>
+                {item.time}
+              </ThemedText>
               <ThemedText style={styles.agendaEventDuration}>
                 {formatDuration(item.duration)}
               </ThemedText>
@@ -112,7 +222,10 @@ export const AgendaListView = forwardRef<
                 {item.title}
               </ThemedText>
               {item.disciplinaNome && (
-                <ThemedText style={styles.agendaEventSubtitle} numberOfLines={1}>
+                <ThemedText
+                  style={styles.agendaEventSubtitle}
+                  numberOfLines={1}
+                >
                   {item.disciplinaNome}
                 </ThemedText>
               )}
@@ -134,9 +247,12 @@ export const AgendaListView = forwardRef<
                     />
                   </View>
                   {isExpanded && (
-                    <ThemedText style={styles.recommendationText}>
-                      {item.studyRecommendation}
-                    </ThemedText>
+                    <View style={styles.recommendationTextContainer}>
+                      {/* Removido style prop, usando apenas rules */}
+                      <Markdown rules={markdownRules}>
+                        {item.studyRecommendation || ""}
+                      </Markdown>
+                    </View>
                   )}
                 </View>
               )}
@@ -145,7 +261,6 @@ export const AgendaListView = forwardRef<
         );
       }}
       ListEmptyComponent={
-        // Mostrado apenas se 'sections' estiver totalmente vazio
         <View style={styles.emptyContainer}>
           <MaterialIcons
             name="event-busy"
@@ -168,35 +283,29 @@ const styles = StyleSheet.create({
   listContentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 20,
-    flexGrow: 1, // Permite que ListEmptyComponent centralize
+    flexGrow: 1,
   },
-  sectionHeaderContainer: {
-    // Container para o header e texto de seção vazia
-    // backgroundColor: 'transparent', // Garante fundo transparente
-  },
+  sectionHeaderContainer: {},
   sectionHeader: {
     fontSize: 18,
     fontWeight: "bold",
     paddingTop: 25,
-    paddingBottom: 8, // Menos padding embaixo para acomodar texto vazio
+    paddingBottom: 8,
   },
   todayHeader: {
-    color: Colors.light.tint, // Destaca o header de hoje
+    color: Colors.light.tint,
   },
   emptySectionHeader: {
-    opacity: 0.8, // Header de dia vazio um pouco mais sutil (opcional)
+    opacity: 0.8,
   },
   emptySectionText: {
-    // Texto mostrado abaixo do header se a seção estiver vazia
     fontSize: 14,
     opacity: 0.6,
     fontStyle: "italic",
-    paddingBottom: 15, // Espaço abaixo do texto
-    // paddingLeft: 5, // Pequeno indent
+    paddingBottom: 15,
   },
   agendaEventItem: {
     flexDirection: "row",
-    alignItems: "center",
     borderRadius: 12,
     marginBottom: 10,
     padding: 16,
@@ -209,6 +318,7 @@ const styles = StyleSheet.create({
   eventTimeDetails: {
     width: 65,
     alignItems: "flex-start",
+    paddingTop: 2,
   },
   agendaEventTime: {
     fontSize: 16,
@@ -221,10 +331,10 @@ const styles = StyleSheet.create({
   },
   eventTitleBar: {
     width: 4,
-    height: "80%",
+    minHeight: 40,
     borderRadius: 2,
     marginRight: 12,
-    alignSelf: "center",
+    alignSelf: "stretch",
   },
   agendaEventTitleContainer: {
     flex: 1,
@@ -238,10 +348,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   emptyContainer: {
-    flex: 1, // Ocupa espaço
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    minHeight: 200, // Altura mínima para centralizar bem
+    minHeight: 200,
   },
   noEventsText: {
     textAlign: "center",
@@ -250,8 +360,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   recommendationSection: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   recommendationHeader: {
@@ -262,10 +372,14 @@ const styles = StyleSheet.create({
   recommendationLabel: {
     fontSize: 13,
     fontWeight: "600",
+    opacity: 0.9,
   },
-  recommendationText: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 18,
+  recommendationTextContainer: {
+    marginTop: 8,
+  },
+  listItemStyle: {
+    flexDirection: "row",
+    marginBottom: 5,
+    flexWrap: "wrap",
   },
 });
