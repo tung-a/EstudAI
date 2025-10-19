@@ -296,7 +296,7 @@ export const AddEventModal = ({
                   placeholderTextColor={themeColors.icon}
                   value={eventTime}
                   onChangeText={setEventTime}
-                  keyboardType="numbers-and-punctuation" // <-- Correção mantida
+                  keyboardType="numbers-and-punctuation"
                   maxLength={5}
                 />
                 <TextInput
@@ -322,8 +322,7 @@ export const AddEventModal = ({
                 <ThemedText>Sugerir tópicos de estudo?</ThemedText>
                 <Switch
                   value={recommendContent}
-                  // Usa o novo handler que também limpa a disciplina
-                  onValueChange={handleRecommendSwitchChange} // <-- ALTERADO AQUI
+                  onValueChange={handleRecommendSwitchChange}
                   trackColor={{ false: "#767577", true: themeColors.accent }}
                   thumbColor={
                     Platform.OS === "android"
@@ -336,7 +335,7 @@ export const AddEventModal = ({
                 />
               </View>
               {/* Botão Seletor de Disciplina (CONDICIONAL) */}
-              {recommendContent && ( // <--- ADICIONADA CONDIÇÃO AQUI
+              {recommendContent && (
                 <TouchableOpacity
                   style={[
                     styles.selectorButton,
@@ -367,8 +366,7 @@ export const AddEventModal = ({
                       ]}
                       numberOfLines={1}
                     >
-                      {selectedDisciplina || "Selecionar Disciplina"}{" "}
-                      {/* Removido (opcional) */}
+                      {selectedDisciplina || "Selecionar Disciplina"}
                     </Text>
                   )}
                   <MaterialIcons
@@ -377,8 +375,7 @@ export const AddEventModal = ({
                     color={themeColors.icon}
                   />
                 </TouchableOpacity>
-              )}{" "}
-              {/* <--- FIM DA CONDIÇÃO */}
+              )}
               {/* Botões Salvar/Cancelar */}
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: themeColors.accent }]}
