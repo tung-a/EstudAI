@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
@@ -436,147 +437,157 @@ Follow-up suggestions (JSON array only):`,
   }
 
   return (
-    <ThemedView style={styles.container}>
-      {/* Lista de Mensagens */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(_, index) => `${selectedConversation.id}-${index}`}
-        contentContainerStyle={[
-          styles.messagesList,
-          messages.length === 0 && styles.messagesListEmpty,
-        ]}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.messageContainer,
-              item.role === "user"
-                ? styles.userMessageContainer
-                : styles.modelMessageContainer,
-              {
-                backgroundColor:
-                  item.role === "user" ? themeColors.accent : themeColors.card,
-              },
-            ]}
-          >
-            <Markdown
-              // CORREÇÃO: Assegura que o tipo dos estilos passados seja compatível
-              style={{
-                body: {
-                  ...markdownStyles.body,
-                  color: item.role === "user" ? "#FFFFFF" : themeColors.text,
-                },
-                strong: {
-                  ...markdownStyles.strong, // Inclui fontWeight: 'bold'
-                  color: item.role === "user" ? "#FFFFFF" : themeColors.text, // Define a cor
-                },
-                list_item: {
-                  ...markdownStyles.list_item,
-                  color: item.role === "user" ? "#FFFFFF" : themeColors.text,
-                  // A lib pode precisar de mais estilos para bullet points, etc.
-                },
-                // Adicione outros estilos aqui se necessário
-              }}
-            >
-              {item.parts[0].text}
-            </Markdown>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.listEmpty}>
-            <MaterialIcons
-              name="auto-awesome"
-              size={48}
-              color={themeColors.icon + "80"}
-            />
-            <ThemedText
-              style={[styles.listEmptyText, { color: themeColors.text }]}
-            >
-              Como posso te ajudar a estudar hoje?
-            </ThemedText>
-          </View>
-        }
-        ListFooterComponent={
-          suggestedQuestions.length > 0 ? <View style={{ height: 20 }} /> : null
-        }
-      />
-
-      {/* Área de Sugestões */}
-      {suggestedQuestions.length > 0 && !loading && (
-        <View style={styles.suggestionsWrapper}>
-          {suggestedQuestions.map((suggestion, index) => (
-            <TouchableOpacity
-              key={`${suggestion}-${index}`}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"} // Define o comportamento
+      style={styles.keyboardAvoiding} // Adiciona um estilo flex: 1
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0} // Ajuste o offset se necessário (altura do header, etc.)
+    >
+      <ThemedView style={styles.container}>
+        {/* Lista de Mensagens */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(_, index) => `${selectedConversation.id}-${index}`}
+          contentContainerStyle={[
+            styles.messagesList,
+            messages.length === 0 && styles.messagesListEmpty,
+          ]}
+          renderItem={({ item }) => (
+            <View
               style={[
-                styles.suggestionButton,
+                styles.messageContainer,
+                item.role === "user"
+                  ? styles.userMessageContainer
+                  : styles.modelMessageContainer,
                 {
-                  backgroundColor: themeColors.card + "B3",
-                  borderColor: themeColors.icon + "40",
+                  backgroundColor:
+                    item.role === "user"
+                      ? themeColors.accent
+                      : themeColors.card,
                 },
               ]}
-              onPress={() => handleApplySuggestion(suggestion)}
             >
-              <Text
-                style={[styles.suggestionText, { color: themeColors.text }]}
+              <Markdown
+                // CORREÇÃO: Assegura que o tipo dos estilos passados seja compatível
+                style={{
+                  body: {
+                    ...markdownStyles.body,
+                    color: item.role === "user" ? "#FFFFFF" : themeColors.text,
+                  },
+                  strong: {
+                    ...markdownStyles.strong, // Inclui fontWeight: 'bold'
+                    color: item.role === "user" ? "#FFFFFF" : themeColors.text, // Define a cor
+                  },
+                  list_item: {
+                    ...markdownStyles.list_item,
+                    color: item.role === "user" ? "#FFFFFF" : themeColors.text,
+                    // A lib pode precisar de mais estilos para bullet points, etc.
+                  },
+                  // Adicione outros estilos aqui se necessário
+                }}
               >
-                {suggestion}
-              </Text>
-              <MaterialIcons
-                name="north-east"
-                size={16}
-                color={themeColors.icon}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Área de Input */}
-      <View
-        style={[
-          styles.inputAreaContainer,
-          {
-            borderTopColor: themeColors.icon + "30",
-            backgroundColor: themeColors.background,
-          },
-        ]}
-      >
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: themeColors.card,
-              borderColor: themeColors.icon + "50",
-              color: themeColors.text,
-            },
-          ]}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Digite sua dúvida..."
-          placeholderTextColor={themeColors.icon}
-          editable={!loading}
-          multiline
-        />
-        <TouchableOpacity
-          onPress={handleSendMessage}
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor: canSendMessage
-                ? themeColors.accent
-                : themeColors.icon + "80",
-            },
-          ]}
-          disabled={!canSendMessage || loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <MaterialIcons name="send" size={20} color="#fff" />
+                {item.parts[0].text}
+              </Markdown>
+            </View>
           )}
-        </TouchableOpacity>
-      </View>
-    </ThemedView>
+          ListEmptyComponent={
+            <View style={styles.listEmpty}>
+              <MaterialIcons
+                name="auto-awesome"
+                size={48}
+                color={themeColors.icon + "80"}
+              />
+              <ThemedText
+                style={[styles.listEmptyText, { color: themeColors.text }]}
+              >
+                Como posso te ajudar a estudar hoje?
+              </ThemedText>
+            </View>
+          }
+          ListFooterComponent={
+            suggestedQuestions.length > 0 ? (
+              <View style={{ height: 20 }} />
+            ) : null
+          }
+        />
+
+        {/* Área de Sugestões */}
+        {suggestedQuestions.length > 0 && !loading && (
+          <View style={styles.suggestionsWrapper}>
+            {suggestedQuestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={`${suggestion}-${index}`}
+                style={[
+                  styles.suggestionButton,
+                  {
+                    backgroundColor: themeColors.card + "B3",
+                    borderColor: themeColors.icon + "40",
+                  },
+                ]}
+                onPress={() => handleApplySuggestion(suggestion)}
+              >
+                <Text
+                  style={[styles.suggestionText, { color: themeColors.text }]}
+                >
+                  {suggestion}
+                </Text>
+                <MaterialIcons
+                  name="north-east"
+                  size={16}
+                  color={themeColors.icon}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Área de Input */}
+        <View
+          style={[
+            styles.inputAreaContainer,
+            {
+              borderTopColor: themeColors.icon + "30",
+              backgroundColor: themeColors.background,
+            },
+          ]}
+        >
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.icon + "50",
+                color: themeColors.text,
+              },
+            ]}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Digite sua dúvida..."
+            placeholderTextColor={themeColors.icon}
+            editable={!loading}
+            multiline
+          />
+          <TouchableOpacity
+            onPress={handleSendMessage}
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: canSendMessage
+                  ? themeColors.accent
+                  : themeColors.icon + "80",
+              },
+            ]}
+            disabled={!canSendMessage || loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <MaterialIcons name="send" size={20} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 
