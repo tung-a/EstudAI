@@ -112,7 +112,7 @@ export default function UserDrawerLayout() {
         screenOptions={{
           headerShown: false, // Esconde o header padrão do Drawer
           drawerType: "slide", // Ou 'front', 'back'
-          swipeEnabled: true, // Permite abrir arrastando
+          swipeEnabled: false, // Permite abrir arrastando
         }}
       >
         {/* A única tela do Drawer contém o TabLayout */}
