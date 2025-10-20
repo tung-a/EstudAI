@@ -15,7 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  ScrollView,
+  ScrollView, // Manter ScrollView
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// ... (Interfaces AnalyticsEvent, DashboardStats, Period inalteradas) ...
 interface AnalyticsEvent {
   id: string;
   eventName: string;
@@ -43,7 +44,7 @@ interface DashboardStats {
 
 type Period = "today" | "week" | "month";
 
-// Simple Bar Chart Component
+// Componente BarChart (Com ScrollView Horizontal)
 const BarChart = ({
   data,
   color,
@@ -51,33 +52,42 @@ const BarChart = ({
   data: { label: string; value: number }[];
   color: string;
 }) => {
-  const maxValue = Math.max(...data.map((item) => item.value), 1); // Garante que não seja 0 para evitar divisão por zero
+  const maxValue = Math.max(...data.map((item) => item.value), 1);
   return (
     <View style={styles.chartContainer}>
-      {data.map((item, index) => (
-        <View key={index} style={styles.barWrapper}>
-          <View style={styles.barAndValue}>
-            <ThemedText style={styles.barValue}>{item.value}</ThemedText>
-            <View
-              style={[
-                styles.bar,
-                {
-                  height: (item.value / maxValue) * 150,
-                  backgroundColor: color,
-                },
-              ]}
-            />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chartScrollContent}
+      >
+        {data.map((item, index) => (
+          // Aumentar a largura e margem do wrapper
+          <View key={index} style={styles.barWrapper}>
+            <View style={styles.barAndValue}>
+              <ThemedText style={styles.barValue}>{item.value}</ThemedText>
+              <View
+                style={[
+                  styles.bar,
+                  {
+                    // Altura base menor, altura mínima de 2px
+                    height: Math.max(2, (item.value / maxValue) * 100), // Reduzir altura máxima
+                    backgroundColor: color,
+                  },
+                ]}
+              />
+            </View>
+            <ThemedText style={styles.barLabel} numberOfLines={2}>
+              {item.label.replace(/_/g, " ")}
+            </ThemedText>
           </View>
-          <ThemedText style={styles.barLabel}>
-            {item.label.replace(/_/g, " ")}
-          </ThemedText>
-        </View>
-      ))}
+        ))}
+      </ScrollView>
     </View>
   );
 };
 
 export default function DashboardScreen() {
+  // ... (estados e useEffect inalterados, remover screenWidth e isSmallScreen) ...
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -172,18 +182,20 @@ export default function DashboardScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <ThemedText type="title">Dashboard</ThemedText>
+          <ThemedText type="title" style={styles.mainTitle}>
+            Dashboard
+          </ThemedText>
           <ThemedText style={styles.subtitle}>
             Análise de comportamento dos usuários.
           </ThemedText>
 
-          {/* Novo seletor de período */}
+          {/* Seletor de período */}
           <View
             style={[
               styles.periodSelector,
               {
                 backgroundColor: themeColors.card,
-                borderColor: themeColors.icon,
+                borderColor: themeColors.icon + "20",
               },
             ]}
           >
@@ -218,7 +230,7 @@ export default function DashboardScreen() {
                   period === "week" && { color: "#fff" },
                 ]}
               >
-                Semana
+                7 dias
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -235,7 +247,7 @@ export default function DashboardScreen() {
                   period === "month" && { color: "#fff" },
                 ]}
               >
-                Mês
+                30 dias
               </Text>
             </TouchableOpacity>
           </View>
@@ -244,90 +256,97 @@ export default function DashboardScreen() {
             <ActivityIndicator
               size="large"
               color={themeColors.accent}
-              style={{ marginTop: 50 }}
+              style={styles.loadingIndicator}
             />
           ) : (
             <>
               {stats && (
-                <>
-                  <View style={styles.metricsContainer}>
-                    <ThemedView
-                      lightColor={Colors.light.card}
-                      darkColor={Colors.dark.card}
-                      style={styles.metricCard}
-                    >
-                      <MaterialIcons
-                        name="show-chart"
-                        size={24}
-                        color={themeColors.icon}
-                      />
-                      <ThemedText style={styles.metricLabel}>
-                        Total de Eventos
-                      </ThemedText>
-                      <ThemedText style={styles.metric}>
-                        {stats.totalEvents}
-                      </ThemedText>
-                    </ThemedView>
-                    <ThemedView
-                      lightColor={Colors.light.card}
-                      darkColor={Colors.dark.card}
-                      style={styles.metricCard}
-                    >
-                      <MaterialIcons
-                        name="people"
-                        size={24}
-                        color={themeColors.icon}
-                      />
-                      <ThemedText style={styles.metricLabel}>
-                        Usuários Únicos
-                      </ThemedText>
-                      <ThemedText style={styles.metric}>
-                        {stats.uniqueUsers}
-                      </ThemedText>
-                    </ThemedView>
-                  </View>
-
-                  <View style={styles.metricsContainer}>
-                    <ThemedView
-                      lightColor={Colors.light.card}
-                      darkColor={Colors.dark.card}
-                      style={styles.metricCard}
-                    >
-                      <MaterialIcons
-                        name="today"
-                        size={24}
-                        color={themeColors.icon}
-                      />
-                      <ThemedText style={styles.metricLabel}>
-                        Usuários Ativos Hoje (DAU)
-                      </ThemedText>
-                      <ThemedText style={styles.metric}>{stats.dau}</ThemedText>
-                    </ThemedView>
-                    <ThemedView
-                      lightColor={Colors.light.card}
-                      darkColor={Colors.dark.card}
-                      style={styles.metricCard}
-                    >
-                      <MaterialIcons
-                        name="date-range"
-                        size={24}
-                        color={themeColors.icon}
-                      />
-                      <ThemedText style={styles.metricLabel}>
-                        Usuários Ativos no Mês (MAU)
-                      </ThemedText>
-                      <ThemedText style={styles.metric}>{stats.mau}</ThemedText>
-                    </ThemedView>
-                  </View>
-                </>
+                // Métricas sempre empilhadas
+                <View style={styles.metricsContainer}>
+                  <ThemedView
+                    lightColor={Colors.light.card}
+                    darkColor={Colors.dark.card}
+                    style={styles.metricCard}
+                  >
+                    <MaterialIcons
+                      name="show-chart"
+                      size={24}
+                      color={themeColors.icon}
+                      style={styles.metricIcon}
+                    />
+                    <ThemedText style={styles.metricLabel}>
+                      Total de Eventos
+                    </ThemedText>
+                    <ThemedText style={styles.metricValue}>
+                      {stats.totalEvents}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView
+                    lightColor={Colors.light.card}
+                    darkColor={Colors.dark.card}
+                    style={styles.metricCard}
+                  >
+                    <MaterialIcons
+                      name="people"
+                      size={24}
+                      color={themeColors.icon}
+                      style={styles.metricIcon}
+                    />
+                    <ThemedText style={styles.metricLabel}>
+                      Usuários Únicos
+                    </ThemedText>
+                    <ThemedText style={styles.metricValue}>
+                      {stats.uniqueUsers}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView
+                    lightColor={Colors.light.card}
+                    darkColor={Colors.dark.card}
+                    style={styles.metricCard}
+                  >
+                    <MaterialIcons
+                      name="today"
+                      size={24}
+                      color={themeColors.icon}
+                      style={styles.metricIcon}
+                    />
+                    <ThemedText style={styles.metricLabel}>
+                      DAU (Hoje)
+                    </ThemedText>
+                    <ThemedText style={styles.metricValue}>
+                      {stats.dau}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView
+                    lightColor={Colors.light.card}
+                    darkColor={Colors.dark.card}
+                    style={styles.metricCard}
+                  >
+                    <MaterialIcons
+                      name="date-range"
+                      size={24}
+                      color={themeColors.icon}
+                      style={styles.metricIcon}
+                    />
+                    <ThemedText style={styles.metricLabel}>
+                      MAU (Mês)
+                    </ThemedText>
+                    <ThemedText style={styles.metricValue}>
+                      {stats.mau}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
               )}
 
+              {/* Card Gráfico */}
               <ThemedView
                 lightColor={Colors.light.card}
                 darkColor={Colors.dark.card}
                 style={styles.card}
               >
-                <ThemedText type="subtitle">Eventos por Categoria</ThemedText>
+                <ThemedText type="subtitle" style={styles.cardTitle}>
+                  Eventos por Categoria
+                </ThemedText>
                 {chartData.length > 0 ? (
                   <BarChart data={chartData} color={themeColors.accent} />
                 ) : (
@@ -337,15 +356,26 @@ export default function DashboardScreen() {
                 )}
               </ThemedView>
 
+              {/* Card Atividades Recentes */}
               <ThemedView
                 lightColor={Colors.light.card}
                 darkColor={Colors.dark.card}
                 style={styles.card}
               >
-                <ThemedText type="subtitle">Últimas Atividades</ThemedText>
+                <ThemedText type="subtitle" style={styles.cardTitle}>
+                  Últimas Atividades
+                </ThemedText>
                 {recentEvents.length > 0 ? (
-                  recentEvents.map((event) => (
-                    <View key={event.id} style={styles.eventItem}>
+                  recentEvents.map((event, index) => (
+                    <View
+                      key={event.id}
+                      style={[
+                        styles.eventItem,
+                        index === recentEvents.length - 1 && {
+                          borderBottomWidth: 0,
+                        },
+                      ]}
+                    >
                       <ThemedText style={styles.eventName}>
                         {event.eventName.replace(/_/g, " ")}
                       </ThemedText>
@@ -361,7 +391,7 @@ export default function DashboardScreen() {
                   ))
                 ) : (
                   <ThemedText style={styles.placeholderText}>
-                    Nenhum evento recente.
+                    Nenhum evento recente no período.
                   </ThemedText>
                 )}
               </ThemedView>
@@ -376,19 +406,20 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 10,
+  loadingIndicator: {
+    marginTop: 50,
+    alignSelf: "center",
   },
   scrollContent: {
     padding: 20,
+    paddingBottom: 40,
+  },
+  mainTitle: {
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
     opacity: 0.7,
-    marginTop: 4,
     marginBottom: 24,
   },
   periodSelector: {
@@ -397,93 +428,113 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 4,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   periodButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 6,
     alignItems: "center",
+    marginHorizontal: 2,
   },
   periodText: {
-    fontWeight: "bold",
+    fontWeight: "600",
+    fontSize: 14,
   },
+  // Métricas sempre empilhadas
   metricsContainer: {
-    flexDirection: "row",
-    gap: 16,
+    flexDirection: "column", // Alterado para coluna
+    gap: 16, // Espaço entre os cards empilhados
     marginBottom: 16,
   },
   metricCard: {
-    flex: 1,
     borderRadius: 12,
     padding: 16,
-    alignItems: "flex-start",
-    gap: 8,
+    flexDirection: "row", // Ícone e texto lado a lado
+    alignItems: "center", // Alinha itens verticalmente
+    gap: 12, // Espaço entre ícone e texto
+  },
+  metricIcon: {
+    // Não precisa de margem agora
   },
   metricLabel: {
     fontSize: 14,
     opacity: 0.8,
+    flex: 1, // Ocupa espaço para empurrar valor para direita
   },
-  metric: {
-    fontSize: 28,
+  metricValue: {
+    fontSize: 24,
     fontWeight: "bold",
+    textAlign: "right", // Alinha valor à direita
   },
   card: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
   },
+  cardTitle: {
+    marginBottom: 16,
+  },
   placeholderText: {
     marginTop: 10,
     fontStyle: "italic",
     opacity: 0.6,
     textAlign: "center",
+    paddingVertical: 20,
   },
   eventItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128,128,128,0.2)",
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128,128,128,0.2)", // Cor mais explícita
   },
   eventName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
     textTransform: "capitalize",
+    flexShrink: 1,
+    marginRight: 10,
   },
   eventTime: {
     fontSize: 14,
     opacity: 0.7,
   },
   chartContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 20,
-    height: 200,
-    alignItems: "flex-end",
+    height: 160, // Reduzir altura total do container do gráfico
+    marginTop: 10,
+  },
+  chartScrollContent: {
+    paddingHorizontal: 10,
+    alignItems: "flex-end", // Alinha os wrappers na base
   },
   barWrapper: {
     alignItems: "center",
-    flex: 1,
-    paddingHorizontal: 4, // Espaçamento entre as barras
+    width: 75, // Aumentar largura para cada item (barra + label)
+    marginHorizontal: 8, // Aumentar margem horizontal
+    justifyContent: "flex-end", // Garante que labels fiquem na base
   },
   barAndValue: {
     alignItems: "center",
+    flexDirection: "column-reverse", // Coloca o valor acima da barra
+    width: "100%",
   },
   barValue: {
-    fontSize: 12,
-    marginBottom: 4,
+    fontSize: 11,
+    marginTop: 4, // Espaço acima do valor
+    opacity: 0.9,
   },
   bar: {
-    width: 25,
+    width: 30, // Largura da barra
     borderRadius: 4,
+    minHeight: 2,
   },
   barLabel: {
-    marginTop: 8,
-    fontSize: 12,
+    marginTop: 8, // Aumentar espaço acima do label
+    fontSize: 11,
     textAlign: "center",
-    flexWrap: "wrap", // Permite que o texto quebre a linha
-    height: 30, // Altura fixa para alinhar
+    height: 30,
+    opacity: 0.8,
   },
 });

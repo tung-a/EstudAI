@@ -7,6 +7,7 @@ import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
@@ -25,7 +26,6 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!loading) {
       if (user) {
-        // Redireciona com base na role do usuário
         if (user.role === "admin") {
           router.replace("/(admin)/dashboard");
         } else {
@@ -44,7 +44,6 @@ function RootLayoutNav() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* Registra os dois layouts de abas */}
       <Stack.Screen name="(user)" />
       <Stack.Screen name="(admin)" />
       <Stack.Screen name="(auth)" />
@@ -57,11 +56,15 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <RootLayoutNav />
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <ThemeProvider
+          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+        >
+          <RootLayoutNav />
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -1,10 +1,13 @@
+// hooks/use-auth.tsx
 import { auth, db } from "@/firebaseConfig";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+// Remove 'timezone' da interface
 interface AuthUser extends User {
   role?: "admin" | "user";
+  // timezone?: string; // Removido
 }
 
 interface AuthContextType {
@@ -35,10 +38,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const userData = docSnap.data();
           setUser({
             ...firebaseUser,
-            role: userData.role || "user", // Default to 'user' if role is not set
+            role: userData.role || "user",
+            // timezone: userData.timezone || "America/Sao_Paulo", // Removido
           });
         } else {
-          setUser(firebaseUser);
+          // Se não houver doc, apenas define o usuário Firebase (sem role ou timezone)
+          setUser({
+            ...firebaseUser,
+            role: "user", // Define um role padrão se necessário
+          });
         }
       } else {
         setUser(null);

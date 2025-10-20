@@ -1,3 +1,4 @@
+// app/(user)/agenda.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
@@ -9,515 +10,811 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc, // Importar getDocs
   onSnapshot,
+  orderBy,
   query,
+  serverTimestamp,
+  Timestamp,
+  updateDoc,
 } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"; // Importar React
 import {
   ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
+  Alert, // Importar Button
+  Modal, // <-- Adicionado Modal
+  ScrollView, // <-- Adicionado ScrollView
+  SectionList,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  Calendar,
-  CalendarProvider,
-  DateData,
-  LocaleConfig,
-  WeekCalendar,
-} from "react-native-calendars";
+import Markdown, { MarkdownNode } from "react-native-markdown-display"; // <-- Importado Markdown e MarkdownNode
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Configuração do idioma
-LocaleConfig.locales["pt-br"] = {
-  monthNames: [
-    "Janeiro",
-    "Fevereiro",
-    "Março",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro",
-  ],
-  monthNamesShort: [
-    "Jan.",
-    "Fev.",
-    "Mar.",
-    "Abr.",
-    "Mai.",
-    "Jun.",
-    "Jul.",
-    "Ago.",
-    "Set.",
-    "Out.",
-    "Nov.",
-    "Dez.",
-  ],
-  dayNames: [
-    "Domingo",
-    "Segunda-feira",
-    "Terça-feira",
-    "Quarta-feira",
-    "Quinta-feira",
-    "Sexta-feira",
-    "Sábado",
-  ],
-  dayNamesShort: ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
-  today: "Hoje",
-};
-LocaleConfig.defaultLocale = "pt-br";
+import { AddEventModal } from "@/components/agenda/AddEventModal";
+import { AgendaListView } from "@/components/agenda/AgendaListView";
+import { DayTimelineView } from "@/components/agenda/DayTimelineView";
+import { WeekSelector } from "@/components/agenda/WeekSelector";
+import { useChat } from "@/contexts/ChatContext"; // Importar useChat
+import { formatDate, getLocalDate, getWeekDays } from "@/lib/dateUtils";
 
-type Event = { id: string; title: string; time: string; date: string };
-type MarkedDates = {
-  [date: string]: {
-    marked?: boolean;
-    dotColor?: string;
-    selected?: boolean;
-    selectedColor?: string;
-    selectedTextColor?: string;
-  };
+// Tipos
+export type Event = {
+  id: string;
+  title: string;
+  time: string;
+  date: string;
+  duration: number;
+  disciplina?: string; // Adicionado
+  disciplinaId?: string;
+  disciplinaNome?: string;
+  studyRecommendation?: string;
+  recommendationGeneratedAt?: Timestamp;
 };
-type CalendarView = "month" | "week";
-const eventColors = ["#a29bfe", "#74b9ff", "#55efc4", "#ff7675"];
+export type EventsByDate = { [date: string]: Event[] };
+type ViewMode = "agenda" | "day";
+// Tipo para perfil do usuário (simplificado)
+type UserProfile = {
+  goal?: string;
+  // outros campos se necessário
+};
+// Tipo para recomendações (simples)
+type Recommendation = {
+  id: string;
+  disciplina: string;
+  data: string;
+  horaSugerida: string;
+  prioridade: number;
+};
 
-// Função para obter a data local no formato YYYY-MM-DD
-const getLocalDate = () => {
-  const date = new Date();
-  const offset = date.getTimezoneOffset();
-  const localDate = new Date(date.getTime() - offset * 60 * 1000);
-  return localDate.toISOString().split("T")[0];
+// Função para normalizar nome/ID (igual aos scripts)
+const normalizeDocId = (name: string | undefined): string | null => {
+  if (!name || typeof name !== "string") return null;
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
 };
 
 export default function AgendaScreen() {
-  const today = useMemo(() => getLocalDate(), []);
-  const [selectedDate, setSelectedDate] = useState(today);
-  const [events, setEvents] = useState<{ [date: string]: Event[] }>({});
+  const currentUser = auth.currentUser;
+  const { getChatModel } = useChat(); // Pegar a função do contexto do chat
+
+  const todayString = useMemo(() => getLocalDate(), []);
+
+  const [selectedDate, setSelectedDate] = useState(todayString);
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
+    const [year, month, day] = todayString.split("-").map(Number);
+    const initialDate = new Date(year, month - 1, day);
+    const startOfWeek = getWeekDays(initialDate)[0];
+    return startOfWeek;
+  });
+  const [events, setEvents] = useState<EventsByDate>({});
   const [modalVisible, setModalVisible] = useState(false);
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventTime, setEventTime] = useState("");
   const [loading, setLoading] = useState(true);
-  const [calendarView, setCalendarView] = useState<CalendarView>("month");
+  const [viewMode, setViewMode] = useState<ViewMode>("agenda");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Estado para perfil
+  const [coursePriorities, setCoursePriorities] = useState<Record<
+    string,
+    number
+  > | null>(null); // Estado para prioridades
+  const [recommendationResult, setRecommendationResult] = useState<
+    string | null
+  >(null); // Estado para exibir recomendação
+  const [recommendationLoading, setRecommendationLoading] = useState(false); // Loading para recomendação
 
   const colorScheme = useColorScheme() ?? "light";
-  const user = auth.currentUser;
+  const themeColors = Colors[colorScheme];
+  const sectionListRef = useRef<SectionList<Event>>(null);
 
+  // Efeito para buscar perfil e prioridades
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    const q = query(collection(db, "users", user.uid, "events"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userEvents: { [date: string]: Event[] } = {};
-      snapshot.forEach((doc) => {
-        const data = doc.data() as Omit<Event, "id">;
-        const event: Event = { id: doc.id, ...data };
-        if (!userEvents[event.date]) {
-          userEvents[event.date] = [];
+    let isMounted = true;
+    const fetchUserData = async () => {
+      if (currentUser && isMounted) {
+        setLoading(true); // Começa a carregar dados do usuário
+        try {
+          // 1. Buscar Perfil (goal)
+          const profileDocSnap = await getDoc(
+            doc(db, "users", currentUser.uid)
+          );
+          if (!isMounted) return;
+
+          let goal = "Outro"; // Fallback
+          if (profileDocSnap.exists()) {
+            const data = profileDocSnap.data();
+            setUserProfile(data as UserProfile);
+            goal = data.goal || "Outro";
+          } else {
+            setUserProfile(null); // Ou um perfil padrão
+          }
+
+          // 2. Buscar Prioridades usando o goal
+          const normalizedGoalId = normalizeDocId(goal);
+          let prioritiesData = null;
+
+          if (normalizedGoalId) {
+            const priorityDocSnap = await getDoc(
+              doc(db, "prioridades_cursos", normalizedGoalId)
+            );
+            if (!isMounted) return;
+            if (priorityDocSnap.exists()) {
+              prioritiesData = priorityDocSnap.data()?.prioridades;
+            }
+          }
+
+          // Fallback para "Outro" se não encontrar prioridades específicas ou goal for inválido
+          if (!prioritiesData) {
+            const fallbackDocSnap = await getDoc(
+              doc(db, "prioridades_cursos", "outro")
+            );
+            if (!isMounted) return;
+            if (fallbackDocSnap.exists()) {
+              prioritiesData = fallbackDocSnap.data()?.prioridades;
+            }
+          }
+
+          setCoursePriorities(prioritiesData);
+        } catch (error) {
+          console.error("Erro ao buscar dados do usuário/prioridades:", error);
+          if (isMounted) {
+            setCoursePriorities(null); // Limpa em caso de erro
+            setUserProfile(null);
+          }
+        } finally {
+          // setLoading(false); // Loading principal será controlado pelo fetch de eventos
         }
-        userEvents[event.date].push(event);
-      });
-      for (const date in userEvents) {
-        userEvents[date].sort((a, b) => {
-          const [aHour, aMinute] = a.time.split(":").map(Number);
-          const [bHour, bMinute] = b.time.split(":").map(Number);
-          if (aHour !== bHour) return aHour - bHour;
-          return aMinute - bMinute;
-        });
+      } else if (isMounted) {
+        // Sem usuário logado
+        setUserProfile(null);
+        setCoursePriorities(null);
+        // setLoading(false); // Loading principal será controlado pelo fetch de eventos
       }
-      setEvents(userEvents);
+    };
+    fetchUserData();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]); // Depende apenas do currentUser
+
+  // Efeito para buscar eventos (ajustado para lidar com loading)
+  useEffect(() => {
+    if (!currentUser) {
       setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleAddEvent = async () => {
-    if (!eventTitle || !eventTime || !user) return;
-
-    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    if (!timeRegex.test(eventTime)) {
-      Alert.alert(
-        "Formato de Hora Inválido",
-        "Por favor, insira a hora no formato HH:MM (ex: 14:30)."
-      );
+      setEvents({});
       return;
     }
 
-    try {
-      await addDoc(collection(db, "users", user.uid, "events"), {
-        title: eventTitle,
-        time: eventTime,
-        date: selectedDate,
-      });
-      logAddEventCalendar();
-      setEventTitle("");
-      setEventTime("");
-      setModalVisible(false);
-    } catch (error) {
-      console.error("Erro ao adicionar evento: ", error);
-    }
-  };
-
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!user) return;
-    try {
-      await deleteDoc(doc(db, "users", user.uid, "events", eventId));
-      logDeleteEventCalendar();
-    } catch (error) {
-      console.error("Erro ao deletar evento: ", error);
-    }
-  };
-
-  const markedDates = useMemo(() => {
-    const marks: MarkedDates = {};
-    // Aplica o ponto para dias com eventos
-    Object.keys(events).forEach((date) => {
-      if (events[date]?.length > 0) {
-        marks[date] = {
-          ...marks[date],
-          marked: true,
-          dotColor: Colors[colorScheme].accent,
-        };
-      }
-    });
-
-    // Aplica o estilo de dia selecionado (círculo suave)
-    marks[selectedDate] = {
-      ...marks[selectedDate],
-      selected: true,
-      selectedColor: `${Colors[colorScheme].accent}80`, // Cor com 50% de opacidade
-      selectedTextColor: colorScheme === "dark" ? "#FFFFFF" : "#000000",
-    };
-
-    // Aplica o estilo de HOJE (círculo sólido), que sobrescreve o de selecionado se for o mesmo dia
-    if (marks[today]) {
-      marks[today] = {
-        ...marks[today],
-        selected: true,
-        selectedColor: Colors[colorScheme].accent,
-        selectedTextColor: "#FFFFFF",
-      };
+    // Só inicia o loading de eventos se os dados do usuário já foram (ou tentaram ser) carregados
+    if (userProfile !== undefined && coursePriorities !== undefined) {
+      setLoading(true);
     } else {
-      marks[today] = {
-        selected: true,
-        selectedColor: Colors[colorScheme].accent,
-        selectedTextColor: "#FFFFFF",
-      };
+      return; // Espera userProfile e coursePriorities serem definidos (null ou objeto)
     }
 
-    return marks;
-  }, [events, selectedDate, today, colorScheme]);
+    const q = query(
+      collection(db, "users", currentUser.uid, "events"),
+      orderBy("date", "asc"),
+      orderBy("time", "asc")
+    );
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const userEvents: EventsByDate = {};
+        snapshot.forEach((doc) => {
+          const data = doc.data() as Omit<Event, "id">;
+          if (!data.date) return;
+          const event: Event = { id: doc.id, ...data };
+          if (!userEvents[event.date]) userEvents[event.date] = [];
+          userEvents[event.date].push(event);
+        });
+        setEvents(userEvents);
+        setLoading(false); // Termina loading APÓS buscar eventos
+      },
+      (error) => {
+        console.error("Erro ao buscar eventos: ", error);
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [currentUser, userProfile, coursePriorities]); // Depende também do perfil/prioridades para iniciar
 
-  const calendarTheme = {
-    backgroundColor: "transparent",
-    calendarBackground: "transparent",
-    textSectionTitleColor: colorScheme === "dark" ? "#9BA1A6" : "#687076",
-    // Cor para Sábado e Domingo
-    textSectionTitleDisabledColor: Colors.light.destructive,
-    selectedDayTextColor: "#FFFFFF",
-    dayTextColor: Colors[colorScheme].text,
-    textDisabledColor: colorScheme === "dark" ? "#555" : "#d9e1e8",
-    dotColor: Colors[colorScheme].accent,
-    selectedDotColor: "#FFFFFF",
-    arrowColor: Colors[colorScheme].accent,
-    monthTextColor: Colors[colorScheme].text,
-    textDayFontWeight: "300" as const,
-    textMonthFontWeight: "bold" as const,
-    textDayHeaderFontWeight: "300" as const,
-    textDayFontSize: 16,
-    textMonthFontSize: 16,
-    textDayHeaderFontSize: 16,
+  // Efeito para atualizar o início da semana (inalterado)
+  useEffect(() => {
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const selectedDateObj = new Date(year, month - 1, day);
+    const startOfWeekForSelected = getWeekDays(selectedDateObj)[0];
+    setCurrentWeekStart(startOfWeekForSelected);
+  }, [selectedDate]);
+
+  // Efeito para rolar (inalterado)
+  useEffect(() => {
+    if (!loading && viewMode === "agenda" && sectionListRef.current) {
+      const datesWithEvents = Object.keys(events);
+      const allDatesSet = new Set(datesWithEvents);
+      allDatesSet.add(todayString);
+      const allSortedDates = Array.from(allDatesSet).sort();
+      const targetSectionIndex = allSortedDates.findIndex(
+        (date) => date >= todayString
+      );
+      if (targetSectionIndex !== -1) {
+        setTimeout(() => {
+          sectionListRef.current?.scrollToLocation({
+            sectionIndex: targetSectionIndex,
+            itemIndex: 0,
+            viewPosition: 0,
+            animated: true,
+          });
+        }, 150);
+      }
+    }
+  }, [loading, viewMode, events, todayString]);
+
+  // --- Função para buscar recomendações ---
+  const generateStudyRecommendations = useCallback(
+    async (disciplina: string, duration: number) => {
+      console.log(
+        `Buscando recomendações para ${disciplina} por ${duration} min.`
+      );
+      setRecommendationLoading(true);
+      setRecommendationResult(null); // Limpa resultado anterior
+
+      try {
+        const userGoal = userProfile?.goal || "Outro";
+        const priorities = coursePriorities;
+        const normalizedDisciplinaId = normalizeDocId(disciplina);
+        let competenciasTexto =
+          "Conteúdo específico da disciplina não encontrado.";
+
+        if (normalizedDisciplinaId) {
+          const disciplinaDocSnap = await getDoc(
+            doc(db, "conteudo_disciplinas", normalizedDisciplinaId)
+          );
+          if (disciplinaDocSnap.exists()) {
+            const data = disciplinaDocSnap.data();
+            competenciasTexto = (data.competencias || [])
+              .map(
+                (comp: any) =>
+                  `Competência ${comp.numero}: ${
+                    comp.descricao || ""
+                  }\nHabilidades: ${(comp.habilidades || [])
+                    .map((h: any) => h.descricao)
+                    .join(", ")}`
+              )
+              .join("\n\n");
+            // Limitar tamanho para não exceder limites do prompt
+            if (competenciasTexto.length > 1500) {
+              competenciasTexto =
+                competenciasTexto.substring(0, 1500) +
+                "... (mais conteúdo disponível)";
+            }
+          }
+        }
+
+        // Usa normalizeDocId também para buscar a prioridade
+        const normalizedPrioKey = normalizeDocId(disciplina);
+        const prioridade =
+          (normalizedPrioKey && priorities?.[normalizedPrioKey]) || 2; // Default 2 (média)
+
+        const promptSegments: string[] = [
+          `Monte um plano de estudo para ${disciplina} com duração total de ${duration} minutos, pensado para o vestibular de ${userGoal}.`,
+          `Divida esse tempo em 2 ou 3 etapas complementares (por exemplo, revisão, exercícios, flashcards), dando alguns minutos a mais quando necessário para preparação, consulta de materiais ou pausa rápida, sempre mencionando o tempo dedicado em cada atividade.`,
+          `Após escolher o conteúdo, selecione um recorte específico (um único conceito, tema ou acontecimento) e foque somente nele; não liste vários tópicos amplos na mesma etapa.`,
+          `Prefira instruções concretas sobre o que fazer naquele recorte (ex.: responder 3 questões sobre "Era Vargas" de um vestibular recente, mapear causa e consequência de um evento, resumir um parágrafo do autor X).`,
+          `Garanta que a soma dos tempos de todas as etapas seja exatamente ${duration} minutos; nunca ofereça etapas que individualmente usem ${duration} minutos ou ultrapassem esse total, mesmo ao adicionar esse tempo extra de preparação.`,
+          `Escreva cada item no formato "XX min – atividade" para deixar claro o tempo reservado.`,
+          `Formate como uma lista numerada simples, sem introdução ou conclusão.`,
+          `A prioridade dessa matéria para este curso é considerada ${
+            prioridade === 3 ? "alta" : prioridade === 2 ? "média" : "baixa"
+          }.`,
+        ];
+
+        if (
+          competenciasTexto !==
+          "Conteúdo específico da disciplina não encontrado."
+        ) {
+          promptSegments.splice(
+            2,
+            0,
+            `Considere as seguintes competências e habilidades gerais: \n${competenciasTexto}`
+          );
+        }
+
+        const prompt = promptSegments.join(" ");
+
+        const model = getChatModel();
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+
+        setRecommendationResult(responseText); // Guarda para exibir
+        return responseText;
+      } catch (error) {
+        console.error("Erro ao buscar recomendações:", error);
+        Alert.alert("Erro", "Não foi possível gerar sugestões no momento.");
+        setRecommendationResult(null);
+        return null;
+      } finally {
+        setRecommendationLoading(false);
+      }
+    },
+    [userProfile, coursePriorities, getChatModel]
+  ); // Depende do perfil, prioridades e da função do chat
+
+  // Handler para adicionar evento (modificado)
+  const handleAddEvent = useCallback(
+    async (eventData: {
+      title: string;
+      time: string;
+      duration: number;
+      disciplina?: string;
+      recommend?: boolean;
+    }) => {
+      if (!currentUser) return;
+      setRecommendationResult(null); // Limpa recomendações antigas
+      setRecommendationLoading(false); // Garante que o loading comece falso
+
+      try {
+        const docData: any = {
+          title: eventData.title,
+          time: eventData.time,
+          duration: eventData.duration,
+          date: selectedDate,
+          createdAt: serverTimestamp(), // Adiciona timestamp de criação
+        };
+        // Salva a disciplina formatada se existir
+        if (eventData.disciplina) {
+          const normalizedDisciplina = normalizeDocId(eventData.disciplina);
+          if (normalizedDisciplina) {
+            docData.disciplinaId = normalizedDisciplina; // Salva ID normalizado
+            docData.disciplinaNome = eventData.disciplina; // Salva nome original
+          }
+        }
+
+        const docRef = await addDoc(
+          collection(db, "users", currentUser.uid, "events"),
+          docData
+        );
+        logAddEventCalendar();
+        setModalVisible(false); // Fecha o modal principal primeiro
+
+        // Chama recomendação DEPOIS de fechar o modal e salvar
+        if (eventData.recommend && eventData.disciplina) {
+          const suggestions = await generateStudyRecommendations(
+            // Isso já define recommendationLoading=true
+            eventData.disciplina,
+            eventData.duration
+          );
+          if (suggestions) {
+            try {
+              // Salva a recomendação no evento
+              await updateDoc(docRef, {
+                studyRecommendation: suggestions,
+                recommendationGeneratedAt: serverTimestamp(),
+              });
+              // O estado recommendationResult já foi definido dentro de generateStudyRecommendations
+            } catch (updateError) {
+              console.error(
+                "Erro ao salvar recomendação no evento:",
+                updateError
+              );
+              // Mesmo com erro ao salvar no doc, a recomendação foi gerada e está em recommendationResult
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error("Erro ao adicionar evento:", error);
+        Alert.alert("Erro", "Não foi possível salvar o evento.");
+        setRecommendationLoading(false); // Garante que loading pare em caso de erro no addDoc
+        setRecommendationResult(null); // Limpa resultado em caso de erro
+      }
+    },
+    [currentUser, selectedDate, generateStudyRecommendations] // Adiciona dependência
+  );
+
+  // Handler para deletar evento (inalterado)
+  const handleDeleteEvent = useCallback(
+    async (eventId: string) => {
+      if (!currentUser) return; // Checa usuário
+      Alert.alert(
+        "Confirmar Exclusão",
+        "Tem certeza que deseja excluir este evento?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Excluir",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteDoc(
+                  doc(db, "users", currentUser.uid, "events", eventId)
+                ); // Usa currentUser.uid
+                logDeleteEventCalendar();
+              } catch (error) {
+                console.error("Erro ao deletar evento: ", error);
+                Alert.alert("Erro", "Não foi possível excluir o evento.");
+              }
+            },
+          },
+        ]
+      );
+    },
+    [currentUser]
+  );
+
+  // Handler para mudar de semana (inalterado)
+  const handleWeekChange = (direction: "prev" | "next") => {
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const currentDateObj = new Date(year, month - 1, day);
+    currentDateObj.setDate(
+      currentDateObj.getDate() + (direction === "prev" ? -7 : 7)
+    );
+    setSelectedDate(formatDate(currentDateObj)); // Atualiza a data selecionada
   };
 
-  const getHeaderTitle = () => {
-    if (!selectedDate) return "Eventos";
-    if (selectedDate === today) return "Eventos de Hoje";
-    const date = new Date(selectedDate);
-    // Ajuste para o fuso horário local ao obter o dia da semana
-    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-    const localDate = new Date(date.getTime() + userTimezoneOffset);
-    return `Eventos de ${
-      LocaleConfig.locales["pt-br"].dayNames[localDate.getDay()]
-    }`;
-  };
-
-  const onDayPress = (day: DateData) => {
-    setSelectedDate(day.dateString);
-  };
+  // --- Regras para o Markdown com Tipos Corretos e Estilos Explícitos ---
+  const markdownRules = useMemo(
+    () => ({
+      // Regra para **texto** (negrito)
+      strong: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <Text
+          key={node.key}
+          style={{
+            fontWeight: "bold",
+            color: themeColors.text,
+            fontSize: 15, // <- Adicionado explicitamente
+            lineHeight: 22, // <- Adicionado explicitamente
+          }}
+        >
+          {children}
+        </Text>
+      ),
+      // Regra para *texto* (itálico)
+      em: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <Text
+          key={node.key}
+          style={{
+            fontStyle: "italic",
+            color: themeColors.text,
+            fontSize: 15, // <- Adicionado explicitamente
+            lineHeight: 22, // <- Adicionado explicitamente
+          }}
+        >
+          {children}
+        </Text>
+      ),
+      // Regra base para texto
+      text: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <Text
+          key={node.key}
+          style={{ color: themeColors.text, fontSize: 15, lineHeight: 22 }}
+        >
+          {node.content}
+        </Text>
+      ),
+      // Regra para itens de lista
+      list_item: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <View key={node.key} style={styles.listItemStyle}>
+          {/* Adicionado espaço após o marcador */}
+          <Text
+            style={{
+              color: themeColors.text,
+              marginRight: 5,
+              lineHeight: 22,
+              fontSize: 15,
+            }}
+          >
+            {parent.type === "bullet_list" ? "• " : `${node.index + 1}. `}
+          </Text>
+          <View style={{ flex: 1 }}>{children}</View>
+        </View>
+      ),
+      // Regra para parágrafo para garantir espaçamento entre blocos
+      paragraph: (
+        node: MarkdownNode,
+        children: React.ReactNode,
+        parent: MarkdownNode,
+        styles: any
+      ) => (
+        <View key={node.key} style={{ marginTop: 5, marginBottom: 10 }}>
+          {children}
+        </View> // Aumentado marginBottom
+      ),
+    }),
+    [themeColors.text]
+  );
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex} edges={["top", "left", "right"]}>
-        <CalendarProvider
-          date={selectedDate}
-          onDateChanged={(date) => setSelectedDate(date)}
-        >
-          <View style={styles.headerContainer}>
-            <View style={styles.viewToggle}>
-              <TouchableOpacity onPress={() => setCalendarView("month")}>
-                <ThemedText
-                  style={[
-                    styles.toggleText,
-                    calendarView === "month" && styles.activeToggle,
-                  ]}
-                >
-                  Mês
-                </ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setCalendarView("week")}>
-                <ThemedText
-                  style={[
-                    styles.toggleText,
-                    calendarView === "week" && styles.activeToggle,
-                  ]}
-                >
-                  Semana
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.addButton,
-                { backgroundColor: Colors[colorScheme].accent },
-              ]}
-              onPress={() => setModalVisible(true)}
-            >
-              <Text style={styles.addButtonText}>+</Text>
-            </TouchableOpacity>
-          </View>
-          {calendarView === "month" ? (
-            <Calendar
-              key="month"
-              markedDates={markedDates}
-              theme={calendarTheme}
-              onDayPress={onDayPress}
-            />
-          ) : (
-            <WeekCalendar
-              key="week"
-              markedDates={markedDates}
-              theme={calendarTheme}
-              onDayPress={onDayPress}
-            />
-          )}
-
-          {loading ? (
-            <ActivityIndicator
-              style={{ flex: 1 }}
-              color={Colors[colorScheme].accent}
-            />
-          ) : (
-            <FlatList
-              style={styles.list}
-              data={events[selectedDate] || []}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContentContainer}
-              ListHeaderComponent={
-                <ThemedText type="subtitle" style={styles.eventsHeader}>
-                  {getHeaderTitle()}
-                </ThemedText>
-              }
-              renderItem={({ item, index }) => {
-                const cardColor = eventColors[index % eventColors.length];
-                return (
-                  <ThemedView
-                    lightColor={Colors.light.card}
-                    darkColor={Colors.dark.card}
-                    style={styles.eventItem}
-                  >
-                    <View
-                      style={[styles.colorBar, { backgroundColor: cardColor }]}
-                    />
-                    <View style={styles.eventDetails}>
-                      <ThemedText style={styles.eventTitle}>
-                        {item.title}
-                      </ThemedText>
-                      <ThemedText style={styles.eventTime}>
-                        {item.time}
-                      </ThemedText>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteEvent(item.id)}
-                    >
-                      <ThemedText style={styles.deleteButton}>✕</ThemedText>
-                    </TouchableOpacity>
-                  </ThemedView>
-                );
-              }}
-              ListEmptyComponent={
-                <ThemedText style={styles.noEventsText}>
-                  Nenhum evento para este dia.
-                </ThemedText>
-              }
-            />
-          )}
-
-          <Modal
-            animationType="slide"
-            transparent
-            visible={modalVisible}
-            onRequestClose={() => setModalVisible(false)}
+        {/* Header com botões de toggle e adicionar */}
+        <View style={styles.header}>
+          <View
+            style={[
+              styles.viewToggleContainer,
+              { backgroundColor: themeColors.card },
+            ]}
           >
-            <View style={styles.modalContainer}>
-              <View
+            <TouchableOpacity
+              onPress={() => setViewMode("agenda")}
+              style={[
+                styles.toggleButton,
+                viewMode === "agenda" && {
+                  backgroundColor: themeColors.accent,
+                },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.modalContent,
-                  { backgroundColor: Colors[colorScheme].background },
+                  styles.toggleButtonText,
+                  { color: viewMode === "agenda" ? "#fff" : themeColors.text },
                 ]}
               >
-                <ThemedText type="subtitle">Adicionar Evento</ThemedText>
-                <TextInput
-                  placeholder="Título do Evento"
-                  style={[
-                    styles.input,
-                    {
-                      color: Colors[colorScheme].text,
-                      borderColor: Colors[colorScheme].icon,
-                    },
-                  ]}
-                  placeholderTextColor={Colors[colorScheme].icon}
-                  value={eventTitle}
-                  onChangeText={setEventTitle}
-                />
-                <TextInput
-                  placeholder="Horário (ex: 14:00)"
-                  style={[
-                    styles.input,
-                    {
-                      color: Colors[colorScheme].text,
-                      borderColor: Colors[colorScheme].icon,
-                    },
-                  ]}
-                  placeholderTextColor={Colors[colorScheme].icon}
-                  value={eventTime}
-                  onChangeText={setEventTime}
-                />
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    { backgroundColor: Colors[colorScheme].accent },
-                  ]}
-                  onPress={handleAddEvent}
-                >
-                  <Text style={styles.buttonText}>Salvar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.button, styles.cancelButton]}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text style={styles.buttonText}>Cancelar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-        </CalendarProvider>
+                Agenda
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setViewMode("day")}
+              style={[
+                styles.toggleButton,
+                viewMode === "day" && { backgroundColor: themeColors.accent },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.toggleButtonText,
+                  { color: viewMode === "day" ? "#fff" : themeColors.text },
+                ]}
+              >
+                Dia
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: themeColors.accent }]}
+            onPress={() => setModalVisible(true)}
+          >
+            <Text style={styles.addButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Seletor de Semana */}
+        <WeekSelector
+          currentWeekStart={currentWeekStart}
+          selectedDate={selectedDate}
+          onDateSelect={setSelectedDate}
+          onWeekChange={handleWeekChange}
+        />
+
+        {/* Conteúdo Principal (Lista ou Timeline) */}
+        <View style={styles.contentContainer}>
+          {loading ? (
+            <ActivityIndicator
+              size="large"
+              color={themeColors.accent}
+              style={styles.loadingIndicator}
+            />
+          ) : viewMode === "agenda" ? (
+            <AgendaListView
+              ref={sectionListRef}
+              events={events}
+              onDeleteEvent={handleDeleteEvent}
+              todayString={todayString}
+            />
+          ) : (
+            <DayTimelineView
+              events={events}
+              selectedDate={selectedDate}
+              onDeleteEvent={handleDeleteEvent}
+            />
+          )}
+        </View>
+
+        {/* Modal de Adicionar Evento (passa a prop onAddEvent atualizada) */}
+        <AddEventModal
+          isVisible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          onAddEvent={handleAddEvent} // Passa o handleAddEvent atualizado
+          selectedDate={selectedDate}
+        />
+
+        {/* ----- NOVO Modal para Exibir Recomendação ----- */}
+        <Modal
+          transparent
+          animationType="fade"
+          visible={!!recommendationResult || recommendationLoading} // Visível se estiver carregando ou tiver resultado
+          onRequestClose={() => setRecommendationResult(null)} // Opcional: fechar ao pressionar back
+        >
+          <View style={styles.recommendationModalBackdrop}>
+            <ThemedView
+              lightColor={Colors.light.card}
+              darkColor={Colors.dark.card}
+              style={styles.recommendationModalContent}
+            >
+              {recommendationLoading && (
+                <>
+                  <ActivityIndicator color={themeColors.accent} size="large" />
+                  <ThemedText
+                    style={[styles.recommendationTitle, { marginTop: 15 }]}
+                  >
+                    Gerando sugestões...
+                  </ThemedText>
+                </>
+              )}
+              {recommendationResult && !recommendationLoading && (
+                <>
+                  <ScrollView style={styles.recommendationScrollView}>
+                    <ThemedText
+                      type="subtitle"
+                      style={styles.recommendationTitle}
+                    >
+                      Sugestões de Estudo:
+                    </ThemedText>
+                    {/* ----- USANDO rules EM VEZ DE style ----- */}
+                    <Markdown rules={markdownRules}>
+                      {recommendationResult}
+                    </Markdown>
+                  </ScrollView>
+                  <View style={styles.modalButtonContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.modalOkButton,
+                        { backgroundColor: themeColors.accent },
+                      ]}
+                      onPress={() => setRecommendationResult(null)}
+                    >
+                      <Text style={styles.modalOkButtonText}>Ok</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ThemedView>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ThemedView>
   );
 }
 
+// Estilos
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  headerContainer: {
+  header: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 10,
+    position: "relative",
   },
-  viewToggle: {
+  viewToggleContainer: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-  },
-  toggleText: {
-    padding: 8,
-    fontSize: 16,
-    opacity: 0.6,
-  },
-  activeToggle: {
-    fontWeight: "bold",
-    opacity: 1,
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.light.accent,
-  },
-  list: {
-    flex: 1,
-    marginTop: 10,
-  },
-  listContentContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  eventsHeader: {
-    marginBottom: 10,
-  },
-  eventItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 10,
-    marginVertical: 5,
-    overflow: "hidden",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-  },
-  colorBar: { width: 6, height: "100%" },
-  eventDetails: { flex: 1, paddingVertical: 12, paddingHorizontal: 12 },
-  eventTitle: { fontWeight: "600", fontSize: 15 },
-  eventTime: { fontSize: 13, opacity: 0.7, marginTop: 2 },
-  noEventsText: { textAlign: "center", marginTop: 20, color: "gray" },
-  deleteButton: { fontSize: 22, padding: 10, opacity: 0.6 },
-  addButton: {
-    width: 40,
-    height: 40,
     borderRadius: 20,
+    overflow: "hidden",
+    padding: 4,
+    borderWidth: 1,
+    borderColor: "rgba(128,128,128,0.1)",
+  },
+  toggleButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 25,
+    borderRadius: 16,
+  },
+  toggleButtonText: {
+    fontWeight: "bold",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  addButton: {
+    position: "absolute",
+    right: 20,
+    top: 10,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
   },
-  addButtonText: { fontSize: 24, color: "white", lineHeight: 24 },
-  modalContainer: {
+  addButtonText: {
+    fontSize: 30,
+    color: "white",
+    lineHeight: 32,
+    marginTop: -2,
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  loadingIndicator: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
-  modalContent: {
-    width: "80%",
+  // Estilos para o MODAL da recomendação
+  recommendationModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)", // Fundo escurecido
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 30, // Espaçamento das bordas
+  },
+  recommendationModalContent: {
+    width: "100%",
+    maxHeight: "75%", // Limita a altura máxima
+    borderRadius: 15,
     padding: 20,
-    borderRadius: 10,
-    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    alignItems: "center", // Centraliza o ActivityIndicator
   },
-  input: {
+  recommendationScrollView: {
+    // Para permitir scroll do texto longo
     width: "100%",
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginVertical: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
+    marginBottom: 15, // Espaço antes do botão
   },
-  button: {
-    padding: 15,
-    borderRadius: 8,
+  recommendationTitle: {
+    marginBottom: 15, // Aumenta espaço abaixo do título
+    textAlign: "center",
+    fontWeight: "bold", // Deixa o título em negrito
+  },
+  modalButtonContainer: {
+    // Container para o botão OK
     width: "100%",
-    alignItems: "center",
+    alignItems: "center", // Centraliza o botão
     marginTop: 10,
   },
-  buttonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
-  cancelButton: { backgroundColor: "gray" },
+  modalOkButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+  },
+  modalOkButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  listItemStyle: {
+    // Estilo para a regra list_item do Markdown
+    flexDirection: "row",
+    marginBottom: 8,
+    // Garante que o texto dentro do item possa quebrar linha
+    flexWrap: "wrap",
+  },
 });

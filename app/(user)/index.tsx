@@ -1,8 +1,11 @@
+// app/(user)/index.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
-import { useRouter } from "expo-router";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -15,7 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Definindo o tipo para os eventos, igual ao da Agenda
+// ... (tipo Event inalterado) ...
 type Event = {
   id: string;
   title: string;
@@ -24,12 +27,15 @@ type Event = {
 };
 
 export default function HomeScreen() {
+  // ... (hooks e estados inalterados) ...
   const [user, setUser] = useState<User | null>(null);
   const [todaysEvents, setTodaysEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const navigation = useNavigation();
+  const colorScheme = useColorScheme() ?? "light";
+  const themeColors = Colors[colorScheme];
 
-  // Efeito para observar a autenticação do usuário
+  // ... (useEffect para auth e events inalterados) ...
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -40,7 +46,6 @@ export default function HomeScreen() {
     return () => unsubscribeAuth();
   }, []);
 
-  // Efeito para buscar os eventos do dia do Firestore
   useEffect(() => {
     if (user) {
       const today = new Date();
@@ -82,65 +87,146 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Header (inalterado) */}
           <View style={styles.header}>
-            <ThemedText type="title">Olá, {userName}!</ThemedText>
+            <ThemedText type="title" style={styles.greeting}>
+              Olá, {userName}! 👋
+            </ThemedText>
             <ThemedText style={styles.headerSubtitle}>
-              Pronto para vencer nos estudos? 🚀 💥
+              Pronto para mais um dia de estudos? 🚀💥
             </ThemedText>
           </View>
 
-          {/* Card de Agenda do Dia */}
+          {/* Card de Agenda do Dia Atualizado */}
           <ThemedView
             lightColor={Colors.light.card}
             darkColor={Colors.dark.card}
             style={styles.card}
           >
-            <ThemedText type="subtitle">Sua agenda para hoje</ThemedText>
+            <View style={styles.cardHeader}>
+              <MaterialIcons
+                name="today"
+                size={22}
+                color={themeColors.icon}
+                style={styles.cardIcon}
+              />
+              <ThemedText type="subtitle">Agenda de Hoje</ThemedText>
+            </View>
             {loading ? (
-              <ActivityIndicator style={styles.cardContent} />
+              <ActivityIndicator
+                style={styles.loadingIndicator}
+                color={themeColors.accent}
+              />
             ) : todaysEvents.length > 0 ? (
-              todaysEvents.map((item) => (
-                <View key={item.id} style={styles.eventItem}>
-                  <ThemedText style={styles.eventTime}>{item.time}</ThemedText>
-                  <ThemedText style={styles.eventTitle}>
-                    {item.title}
-                  </ThemedText>
-                </View>
-              ))
+              // Nova View para a lista de eventos com separadores
+              <View style={styles.eventListContainer}>
+                {todaysEvents.map((item, index) => (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.eventItemNew, // Novo estilo para o item
+                      // Não adiciona borda inferior no último item
+                      index < todaysEvents.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: themeColors.icon + "30", // Cor sutil
+                      },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="fiber-manual-record" // Ícone de ponto
+                      size={10} // Tamanho pequeno
+                      color={themeColors.accent} // Cor do accent
+                      style={styles.eventIcon}
+                    />
+                    <View style={styles.eventTextContainer}>
+                      <ThemedText style={styles.eventTitleNew}>
+                        {item.title}
+                      </ThemedText>
+                      <ThemedText style={styles.eventTimeNew}>
+                        {item.time}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
             ) : (
-              <ThemedText style={styles.cardContent}>
-                Nenhum evento para hoje. Que tal planejar seus estudos?
-              </ThemedText>
+              // Conteúdo vazio (inalterado)
+              <View style={styles.emptyCardContent}>
+                <MaterialIcons
+                  name="sentiment-satisfied"
+                  size={30}
+                  color={themeColors.icon + "80"}
+                />
+                <ThemedText style={styles.emptyText}>
+                  Nenhum evento para hoje.
+                </ThemedText>
+                <TouchableOpacity
+                  style={styles.emptyActionButton}
+                  onPress={() => navigation.navigate("agenda" as never)}
+                >
+                  <ThemedText style={styles.emptyActionText}>
+                    Planejar seus estudos
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
             )}
           </ThemedView>
 
-          {/* Card de Ações Rápidas */}
+          {/* Card de Ações Rápidas (inalterado) */}
           <ThemedView
             lightColor={Colors.light.card}
             darkColor={Colors.dark.card}
             style={styles.card}
           >
-            <ThemedText type="subtitle">Ações Rápidas</ThemedText>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push("/(user)/chat")}
-            >
-              <ThemedText
-                style={{ color: Colors.light.tint, fontWeight: "bold" }}
+            <View style={styles.cardHeader}>
+              <MaterialIcons
+                name="bolt"
+                size={22}
+                color={themeColors.icon}
+                style={styles.cardIcon}
+              />
+              <ThemedText type="subtitle">Ações Rápidas</ThemedText>
+            </View>
+            <View style={styles.actionsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: themeColors.accent + "1A" },
+                ]}
+                onPress={() => navigation.navigate("chat" as never)}
               >
-                Tirar dúvida com a IA
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push("/(user)/agenda")}
-            >
-              <ThemedText
-                style={{ color: Colors.light.tint, fontWeight: "bold" }}
+                <MaterialIcons
+                  name="chat-bubble-outline"
+                  size={20}
+                  color={themeColors.accent}
+                  style={styles.actionIcon}
+                />
+                <ThemedText
+                  style={[styles.actionText, { color: themeColors.accent }]}
+                >
+                  Tirar dúvida com a IA
+                </ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: themeColors.accent + "1A" },
+                ]}
+                onPress={() => navigation.navigate("agenda" as never)}
               >
-                Ver agenda completa
-              </ThemedText>
-            </TouchableOpacity>
+                <MaterialIcons
+                  name="event-note"
+                  size={20}
+                  color={themeColors.accent}
+                  style={styles.actionIcon}
+                />
+                <ThemedText
+                  style={[styles.actionText, { color: themeColors.accent }]}
+                >
+                  Ver agenda completa
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
           </ThemedView>
         </ScrollView>
       </SafeAreaView>
@@ -149,6 +235,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ... (outros estilos inalterados) ...
   container: {
     flex: 1,
   },
@@ -156,48 +243,137 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 24, // Aumenta o padding geral
+    paddingBottom: 40, // Espaço extra no final
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 32, // Mais espaço abaixo do header
+  },
+  greeting: {
+    fontSize: 28, // Um pouco menor que o title padrão
   },
   headerSubtitle: {
-    fontSize: 18,
-    color: "gray",
-    marginTop: 4,
+    fontSize: 16, // Tamanho padrão
+    opacity: 0.7, // Um pouco mais suave
+    marginTop: 6,
   },
   card: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    elevation: 2,
+    borderRadius: 16, // Bordas mais arredondadas
+    padding: 20, // Padding interno maior
+    marginBottom: 24, // Mais espaço entre os cards
+    // Sombra mais suave (ajuste conforme preferir)
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, // Opacidade menor
+    shadowRadius: 10, // Raio maior para suavizar
+    elevation: 3, // Elevação para Android
   },
-  cardContent: {
-    marginTop: 16,
-  },
-  eventItem: {
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
+    marginBottom: 16, // Espaço abaixo do header do card
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(128,128,128,0.1)", // Linha separadora sutil
   },
-  eventTime: {
-    fontWeight: "bold",
-    marginRight: 15,
-    width: 50,
+  cardIcon: {
+    marginRight: 10,
   },
-  eventTitle: {
-    fontSize: 16,
-    flex: 1,
+  loadingIndicator: {
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  // eventList: { // Estilo antigo removido
+  //   marginTop: 8,
+  // },
+  // eventItem: { // Estilo antigo renomeado/removido
+  //   flexDirection: "row",
+  //   alignItems: "center",
+  //   marginBottom: 12,
+  //   paddingVertical: 4,
+  // },
+  // eventTimeBadge: { // Estilo antigo removido
+  //   paddingHorizontal: 10,
+  //   paddingVertical: 5,
+  //   borderRadius: 12,
+  //   marginRight: 12,
+  //   minWidth: 60,
+  //   alignItems: "center",
+  // },
+  // eventTimeText: { // Estilo antigo removido
+  //   fontWeight: "bold",
+  //   fontSize: 14,
+  // },
+  // eventTitle: { // Estilo antigo removido
+  //   fontSize: 15,
+  //   flex: 1,
+  // },
+
+  // --- Novos estilos para a lista de eventos ---
+  eventListContainer: {
+    marginTop: 8, // Espaço após o header do card
+  },
+  eventItemNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12, // Padding vertical para cada item
+  },
+  eventIcon: {
+    marginRight: 12, // Espaço entre o ícone e o texto
+    marginLeft: 4, // Pequeno espaço à esquerda do ícone
+  },
+  eventTextContainer: {
+    flex: 1, // Ocupa o restante do espaço
+  },
+  eventTitleNew: {
+    fontSize: 15,
+    fontWeight: "500", // Peso médio para o título
+    marginBottom: 2, // Pequeno espaço abaixo do título
+  },
+  eventTimeNew: {
+    fontSize: 13,
+    opacity: 0.7, // Cor mais suave para o horário
+  },
+  // --- Fim dos novos estilos ---
+
+  emptyCardContent: {
+    alignItems: "center",
+    paddingVertical: 20,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 15,
+    textAlign: "center",
+    opacity: 0.7,
+  },
+  emptyActionButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: Colors.light.tint + "1A",
+  },
+  emptyActionText: {
+    color: Colors.light.tint,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  actionsContainer: {
+    marginTop: 8,
+    gap: 12,
   },
   actionButton: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(10, 126, 164, 0.1)", // Cor baseada no tint
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  actionIcon: {
+    marginRight: 12,
+  },
+  actionText: {
+    fontWeight: "600",
+    fontSize: 15,
   },
 });
