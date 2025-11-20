@@ -1,16 +1,16 @@
-// components/CustomDrawerContent.tsx
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
-import { useChat } from "@/contexts/ChatContext"; // Importa o hook do contexto
+import { useChat } from "@/contexts/ChatContext";
+import { auth } from "@/firebaseConfig"; // Importar auth
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { logAddConversation } from "@/lib/analytics"; // Importa log de delete
 import { MaterialIcons } from "@expo/vector-icons";
 import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
 } from "@react-navigation/drawer";
+import { signOut } from "firebase/auth"; // Importar signOut
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export function CustomDrawerContent(props: DrawerContentComponentProps) {
@@ -19,14 +19,14 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     selectedConversationId,
     selectConversation,
     addConversation,
-    deleteConversation, // Usaremos esta diretamente
+    deleteConversation,
   } = useChat();
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+  const user = auth.currentUser;
 
   const handleAddNewChat = () => {
     addConversation();
-    logAddConversation();
     props.navigation.closeDrawer();
   };
 
@@ -35,10 +35,12 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   };
 
-  // Função para chamar a confirmação de exclusão
-  const confirmAndDelete = (id: string, title: string) => {
-    // A lógica de confirmação já está dentro de deleteConversation no contexto
-    deleteConversation(id, title);
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error: any) {
+      Alert.alert("Erro", "Não foi possível desconectar.");
+    }
   };
 
   return (
@@ -46,170 +48,174 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       style={[styles.safeArea, { backgroundColor: themeColors.card }]}
       edges={["top", "bottom"]}
     >
+      {/* Cabeçalho do Menu com Dados do Usuário */}
+      <View
+        style={[
+          styles.userHeader,
+          { borderBottomColor: themeColors.icon + "30" },
+        ]}
+      >
+        <View style={[styles.avatar, { borderColor: themeColors.icon + "50" }]}>
+          <MaterialIcons
+            name="account-circle"
+            size={50}
+            color={themeColors.icon}
+          />
+        </View>
+        <View style={styles.userInfo}>
+          <ThemedText type="defaultSemiBold" numberOfLines={1}>
+            {user?.displayName || "Viajante"}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 12, opacity: 0.7 }} numberOfLines={1}>
+            {user?.email}
+          </ThemedText>
+        </View>
+      </View>
+
       <DrawerContentScrollView
         {...props}
-        style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
       >
-        {/* Cabeçalho */}
-        <View
-          style={[
-            styles.drawerHeader,
-            { borderBottomColor: themeColors.icon + "30" },
-          ]}
-        >
-          <ThemedText type="subtitle">Conversas</ThemedText>
+        <View style={styles.sectionTitle}>
+          <ThemedText type="subtitle" style={{ fontSize: 14, opacity: 0.6 }}>
+            CONVERSAS
+          </ThemedText>
         </View>
 
-        {/* Lista de Conversas */}
         {conversations.map((conversation) => {
           const isActive = conversation.id === selectedConversationId;
-          const itemBackgroundColor = isActive
-            ? themeColors.accent + "20" // Fundo ativo ainda mais sutil
-            : "transparent";
-          const textColor = themeColors.text;
-          const iconColor = isActive ? themeColors.accent : themeColors.icon;
-
           return (
-            // O TouchableOpacity principal agora só seleciona
             <TouchableOpacity
               key={conversation.id}
               onPress={() => handleSelectChat(conversation.id)}
-              // onLongPress removido daqui
               style={[
                 styles.conversationItem,
-                { backgroundColor: itemBackgroundColor },
+                {
+                  backgroundColor: isActive
+                    ? themeColors.accent + "20"
+                    : "transparent",
+                },
               ]}
             >
-              {/* Ícone e Texto da Conversa */}
               <MaterialIcons
                 name="chat-bubble-outline"
                 size={20}
-                color={iconColor}
-                style={styles.conversationIcon}
+                color={isActive ? themeColors.accent : themeColors.icon}
               />
               <Text
                 numberOfLines={1}
                 style={[
                   styles.conversationItemText,
-                  { color: textColor },
-                  isActive && styles.activeConversationText,
+                  { color: themeColors.text },
+                  isActive && { fontWeight: "bold", color: themeColors.accent },
                 ]}
               >
                 {conversation.title}
               </Text>
-
-              {/* Botão de Deletar (Ícone de Lixeira) */}
               <TouchableOpacity
                 onPress={() =>
-                  confirmAndDelete(conversation.id, conversation.title)
+                  deleteConversation(conversation.id, conversation.title)
                 }
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Aumenta área de toque
+                hitSlop={10}
                 style={styles.deleteButton}
               >
                 <MaterialIcons
-                  name="delete-outline"
-                  size={20} // Tamanho do ícone de lixeira
-                  color={themeColors.icon + "99"} // Cor sutil para o ícone
+                  name="close"
+                  size={16}
+                  color={themeColors.icon + "80"}
                 />
               </TouchableOpacity>
             </TouchableOpacity>
           );
         })}
 
-        {/* Botão Nova Conversa */}
         <TouchableOpacity
           onPress={handleAddNewChat}
           style={[
-            styles.newConversationButton,
+            styles.actionButton,
             { borderColor: themeColors.icon + "50" },
           ]}
         >
-          <MaterialIcons
-            name="add-circle-outline"
-            size={22}
-            color={themeColors.accent}
-            style={styles.conversationIcon} // Reusa o estilo do ícone para alinhamento
-          />
-          <Text
-            style={[
-              styles.newConversationButtonText,
-              { color: themeColors.text },
-            ]}
-          >
-            Nova conversa
+          <MaterialIcons name="add" size={20} color={themeColors.text} />
+          <Text style={[styles.actionButtonText, { color: themeColors.text }]}>
+            Nova Conversa
           </Text>
         </TouchableOpacity>
-
-        {/* Separador Opcional */}
-        {/* <View style={[styles.separator, { backgroundColor: themeColors.icon + '30'}]} /> */}
       </DrawerContentScrollView>
+
+      {/* Rodapé com Logout */}
+      <View
+        style={[styles.footer, { borderTopColor: themeColors.icon + "30" }]}
+      >
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <MaterialIcons
+            name="logout"
+            size={20}
+            color={themeColors.destructive}
+          />
+          <Text style={[styles.logoutText, { color: themeColors.destructive }]}>
+            Sair da Conta
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  safeArea: { flex: 1 },
+  userHeader: {
+    padding: 20,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatar: {
+    marginRight: 12,
+  },
+  userInfo: {
     flex: 1,
   },
-  scrollView: {},
-  scrollViewContent: {
-    paddingTop: 0,
-    paddingBottom: 10,
-  },
-  drawerHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 15,
-    paddingBottom: 15,
-    marginBottom: 10,
-    borderBottomWidth: 1,
-  },
+  scrollViewContent: { paddingVertical: 10 },
+  sectionTitle: { paddingHorizontal: 16, marginBottom: 8, marginTop: 10 },
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10, // Diminuído um pouco para acomodar melhor
-    paddingLeft: 16, // Padding esquerdo
-    paddingRight: 10, // Padding direito menor para dar espaço ao botão delete
-    marginBottom: 2,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     marginHorizontal: 8,
-  },
-  conversationIcon: {
-    marginRight: 15,
-    width: 20, // Garante alinhamento com o texto
-    textAlign: "center",
+    borderRadius: 8,
+    marginBottom: 2,
   },
   conversationItemText: {
-    fontSize: 15,
-    fontWeight: "500",
-    flex: 1, // Ocupa o espaço restante antes do botão delete
-    marginRight: 8, // Espaço antes do botão delete
+    fontSize: 14,
+    marginLeft: 12,
+    flex: 1,
   },
-  activeConversationText: {
-    fontWeight: "bold",
-  },
-  deleteButton: {
-    padding: 6, // Área de toque ao redor do ícone
-    borderRadius: 15, // Círculo sutil
-    // backgroundColor: 'rgba(255,0,0,0.1)', // Para debug da área de toque
-  },
-  newConversationButton: {
+  deleteButton: { padding: 4 },
+  actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1.5,
-    borderRadius: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginVertical: 15,
-    marginHorizontal: 8,
-  },
-  newConversationButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  separator: {
-    height: 1,
-    marginVertical: 10,
+    justifyContent: "center",
+    paddingVertical: 12,
     marginHorizontal: 16,
+    marginTop: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: "dashed",
+  },
+  actionButtonText: { marginLeft: 8, fontSize: 14, fontWeight: "600" },
+  footer: {
+    padding: 20,
+    borderTopWidth: 1,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  logoutText: {
+    marginLeft: 10,
+    fontWeight: "600",
+    fontSize: 16,
   },
 });

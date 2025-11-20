@@ -1,6 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { Collapsible } from "@/components/ui/collapsible"; // Importando o componente de "gaveta"
+import { Collapsible } from "@/components/ui/collapsible";
 import { Colors } from "@/constants/theme";
 import { db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -15,14 +15,16 @@ import {
   View,
 } from "react-native";
 
-interface User {
+// Interface atualizada com os novos campos
+export interface User {
   id: string;
   name: string;
   email: string;
   role: "admin" | "user";
-  age?: string;
-  school?: string;
-  goal?: string;
+  birthDate?: string;
+  birthTime?: string;
+  birthPlace?: string;
+  zodiacSign?: string;
 }
 
 interface UserListItemProps {
@@ -35,8 +37,8 @@ const UserListItem: React.FC<UserListItemProps> = ({ user }) => {
 
   const handleRoleChange = (newRole: "admin" | "user") => {
     Alert.alert(
-      "Confirmar Alteração",
-      `Tem certeza que deseja alterar a permissão de "${user.name}" para "${newRole}"?`,
+      "Alterar Permissão",
+      `Deseja alterar o nível espiritual de "${user.name}" para "${newRole}"?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -52,8 +54,8 @@ const UserListItem: React.FC<UserListItemProps> = ({ user }) => {
 
   const confirmDeleteUser = () => {
     Alert.alert(
-      "Confirmar Exclusão",
-      `Tem certeza que deseja excluir o usuário "${user.name}"? Esta ação não pode ser desfeita.`,
+      "Banir Viajante",
+      `Tem certeza que deseja excluir "${user.name}" do sistema?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -68,18 +70,6 @@ const UserListItem: React.FC<UserListItemProps> = ({ user }) => {
     );
   };
 
-  // Ações futuras
-  const suspendUser = () =>
-    Alert.alert(
-      "Função não implementada",
-      "A suspensão de usuário ainda será desenvolvida."
-    );
-  const resetPassword = () =>
-    Alert.alert(
-      "Função não implementada",
-      "O reset de senha ainda será desenvolvido."
-    );
-
   return (
     <ThemedView
       lightColor={Colors.light.card}
@@ -88,23 +78,40 @@ const UserListItem: React.FC<UserListItemProps> = ({ user }) => {
     >
       <Collapsible title={user.name}>
         <ThemedText style={styles.email}>{user.email}</ThemedText>
+
+        {/* Novos Dados Místicos */}
         <View style={styles.detailsContainer}>
-          <ThemedText style={styles.detailText}>
-            Idade: {user.age || "Não informado"}
-          </ThemedText>
-          <ThemedText style={styles.detailText}>
-            Instituição: {user.school || "Não informada"}
-          </ThemedText>
-          <ThemedText style={styles.detailText}>
-            Objetivo: {user.goal || "Não informado"}
-          </ThemedText>
+          <View style={styles.detailRow}>
+            <MaterialIcons name="stars" size={16} color={themeColors.accent} />
+            <ThemedText style={styles.detailText}>
+              Signo:{" "}
+              <ThemedText style={{ fontWeight: "bold" }}>
+                {user.zodiacSign || "Não calculado"}
+              </ThemedText>
+            </ThemedText>
+          </View>
+
+          <View style={styles.detailRow}>
+            <MaterialIcons name="cake" size={16} color={themeColors.icon} />
+            <ThemedText style={styles.detailText}>
+              Nasc.: {user.birthDate || "--/--/----"} às{" "}
+              {user.birthTime || "--:--"}
+            </ThemedText>
+          </View>
+
+          <View style={styles.detailRow}>
+            <MaterialIcons name="place" size={16} color={themeColors.icon} />
+            <ThemedText style={styles.detailText}>
+              Local: {user.birthPlace || "Desconhecido"}
+            </ThemedText>
+          </View>
         </View>
 
         <View style={styles.separator} />
 
         <View style={styles.roleSwitcher}>
           <ThemedText style={styles.roleLabel}>
-            Permissão de Administrador
+            Acesso de Mestre (Admin)
           </ThemedText>
           <Switch
             value={user.role === "admin"}
@@ -119,31 +126,19 @@ const UserListItem: React.FC<UserListItemProps> = ({ user }) => {
         <View style={styles.separator} />
 
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton} onPress={resetPassword}>
-            <MaterialIcons
-              name="lock-reset"
-              size={22}
-              color={themeColors.icon}
-            />
-            <ThemedText style={styles.actionText}>Resetar Senha</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={suspendUser}>
-            <MaterialIcons name="block" size={22} color={themeColors.icon} />
-            <ThemedText style={styles.actionText}>Suspender</ThemedText>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={confirmDeleteUser}
           >
             <MaterialIcons
-              name="delete"
+              name="delete-outline"
               size={22}
               color={themeColors.destructive}
             />
             <ThemedText
               style={[styles.actionText, { color: themeColors.destructive }]}
             >
-              Excluir
+              Remover Conta
             </ThemedText>
           </TouchableOpacity>
         </View>
@@ -158,14 +153,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     marginVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(128,128,128,0.1)",
   },
   email: {
     fontSize: 14,
-    opacity: 0.7,
-    marginTop: 4,
+    opacity: 0.6,
+    marginTop: 2,
+    marginBottom: 10,
   },
   detailsContainer: {
-    marginTop: 12,
+    marginTop: 8,
+    gap: 6,
+    backgroundColor: "rgba(128,128,128,0.05)",
+    padding: 10,
+    borderRadius: 8,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   detailText: {
@@ -173,8 +179,8 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: "rgba(128,128,128,0.2)",
-    marginVertical: 16,
+    backgroundColor: "rgba(128,128,128,0.1)",
+    marginVertical: 12,
   },
   roleSwitcher: {
     flexDirection: "row",
@@ -186,15 +192,18 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   actionsContainer: {
-    gap: 16,
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
+    padding: 4,
   },
   actionText: {
     fontSize: 14,
+    fontWeight: "500",
   },
 });
 

@@ -1,4 +1,3 @@
-// app/(user)/agenda.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
@@ -10,7 +9,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDoc, // Importar getDocs
   onSnapshot,
   orderBy,
   query,
@@ -24,70 +22,46 @@ import React, {
   useMemo,
   useRef,
   useState,
-} from "react"; // Importar React
+} from "react";
 import {
   ActivityIndicator,
-  Alert, // Importar Button
-  Modal, // <-- Adicionado Modal
-  ScrollView, // <-- Adicionado ScrollView
+  Alert,
+  Modal,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import Markdown, { MarkdownNode } from "react-native-markdown-display"; // <-- Importado Markdown e MarkdownNode
+import Markdown, { MarkdownNode } from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AddEventModal } from "@/components/agenda/AddEventModal";
 import { AgendaListView } from "@/components/agenda/AgendaListView";
 import { DayTimelineView } from "@/components/agenda/DayTimelineView";
 import { WeekSelector } from "@/components/agenda/WeekSelector";
-import { useChat } from "@/contexts/ChatContext"; // Importar useChat
+import { useChat } from "@/contexts/ChatContext";
 import { formatDate, getLocalDate, getWeekDays } from "@/lib/dateUtils";
 
-// Tipos
+// --- TIPO ATUALIZADO ---
 export type Event = {
   id: string;
   title: string;
   time: string;
   date: string;
   duration: number;
-  disciplina?: string; // Adicionado
-  disciplinaId?: string;
-  disciplinaNome?: string;
+  energy?: string; // Renomeado de 'disciplina' para 'energy'
   studyRecommendation?: string;
   recommendationGeneratedAt?: Timestamp;
 };
+
 export type EventsByDate = { [date: string]: Event[] };
 type ViewMode = "agenda" | "day";
-// Tipo para perfil do usuário (simplificado)
-type UserProfile = {
-  goal?: string;
-  // outros campos se necessário
-};
-// Tipo para recomendações (simples)
-type Recommendation = {
-  id: string;
-  disciplina: string;
-  data: string;
-  horaSugerida: string;
-  prioridade: number;
-};
-
-// Função para normalizar nome/ID (igual aos scripts)
-const normalizeDocId = (name: string | undefined): string | null => {
-  if (!name || typeof name !== "string") return null;
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, "-");
-};
 
 export default function AgendaScreen() {
   const currentUser = auth.currentUser;
-  const { getChatModel } = useChat(); // Pegar a função do contexto do chat
+  const { getChatModel } = useChat();
 
   const todayString = useMemo(() => getLocalDate(), []);
 
@@ -102,123 +76,55 @@ export default function AgendaScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("agenda");
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Estado para perfil
-  const [coursePriorities, setCoursePriorities] = useState<Record<
-    string,
-    number
-  > | null>(null); // Estado para prioridades
+
   const [recommendationResult, setRecommendationResult] = useState<
     string | null
-  >(null); // Estado para exibir recomendação
-  const [recommendationLoading, setRecommendationLoading] = useState(false); // Loading para recomendação
+  >(null);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const sectionListRef = useRef<SectionList<Event>>(null);
 
-  // Efeito para buscar perfil e prioridades
-  useEffect(() => {
-    let isMounted = true;
-    const fetchUserData = async () => {
-      if (currentUser && isMounted) {
-        setLoading(true); // Começa a carregar dados do usuário
-        try {
-          // 1. Buscar Perfil (goal)
-          const profileDocSnap = await getDoc(
-            doc(db, "users", currentUser.uid)
-          );
-          if (!isMounted) return;
-
-          let goal = "Outro"; // Fallback
-          if (profileDocSnap.exists()) {
-            const data = profileDocSnap.data();
-            setUserProfile(data as UserProfile);
-            goal = data.goal || "Outro";
-          } else {
-            setUserProfile(null); // Ou um perfil padrão
-          }
-
-          // 2. Buscar Prioridades usando o goal
-          const normalizedGoalId = normalizeDocId(goal);
-          let prioritiesData = null;
-
-          if (normalizedGoalId) {
-            const priorityDocSnap = await getDoc(
-              doc(db, "prioridades_cursos", normalizedGoalId)
-            );
-            if (!isMounted) return;
-            if (priorityDocSnap.exists()) {
-              prioritiesData = priorityDocSnap.data()?.prioridades;
-            }
-          }
-
-          // Fallback para "Outro" se não encontrar prioridades específicas ou goal for inválido
-          if (!prioritiesData) {
-            const fallbackDocSnap = await getDoc(
-              doc(db, "prioridades_cursos", "outro")
-            );
-            if (!isMounted) return;
-            if (fallbackDocSnap.exists()) {
-              prioritiesData = fallbackDocSnap.data()?.prioridades;
-            }
-          }
-
-          setCoursePriorities(prioritiesData);
-        } catch (error) {
-          console.error("Erro ao buscar dados do usuário/prioridades:", error);
-          if (isMounted) {
-            setCoursePriorities(null); // Limpa em caso de erro
-            setUserProfile(null);
-          }
-        } finally {
-          // setLoading(false); // Loading principal será controlado pelo fetch de eventos
-        }
-      } else if (isMounted) {
-        // Sem usuário logado
-        setUserProfile(null);
-        setCoursePriorities(null);
-        // setLoading(false); // Loading principal será controlado pelo fetch de eventos
-      }
-    };
-    fetchUserData();
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUser]); // Depende apenas do currentUser
-
-  // Efeito para buscar eventos (ajustado para lidar com loading)
   useEffect(() => {
     if (!currentUser) {
       setLoading(false);
       setEvents({});
       return;
     }
-
-    // Só inicia o loading de eventos se os dados do usuário já foram (ou tentaram ser) carregados
-    if (userProfile !== undefined && coursePriorities !== undefined) {
-      setLoading(true);
-    } else {
-      return; // Espera userProfile e coursePriorities serem definidos (null ou objeto)
-    }
+    setLoading(true);
 
     const q = query(
       collection(db, "users", currentUser.uid, "events"),
       orderBy("date", "asc"),
       orderBy("time", "asc")
     );
+
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const userEvents: EventsByDate = {};
         snapshot.forEach((doc) => {
-          const data = doc.data() as Omit<Event, "id">;
+          const data = doc.data();
           if (!data.date) return;
-          const event: Event = { id: doc.id, ...data };
+
+          // Mapeando do Banco (disciplinaNome) para o App (energy)
+          const event: Event = {
+            id: doc.id,
+            title: data.title,
+            time: data.time,
+            date: data.date,
+            duration: data.duration,
+            studyRecommendation: data.studyRecommendation,
+            recommendationGeneratedAt: data.recommendationGeneratedAt,
+            energy: data.disciplinaNome, // <-- Mapeamento aqui
+          };
+
           if (!userEvents[event.date]) userEvents[event.date] = [];
           userEvents[event.date].push(event);
         });
         setEvents(userEvents);
-        setLoading(false); // Termina loading APÓS buscar eventos
+        setLoading(false);
       },
       (error) => {
         console.error("Erro ao buscar eventos: ", error);
@@ -226,9 +132,8 @@ export default function AgendaScreen() {
       }
     );
     return () => unsubscribe();
-  }, [currentUser, userProfile, coursePriorities]); // Depende também do perfil/prioridades para iniciar
+  }, [currentUser]);
 
-  // Efeito para atualizar o início da semana (inalterado)
   useEffect(() => {
     const [year, month, day] = selectedDate.split("-").map(Number);
     const selectedDateObj = new Date(year, month - 1, day);
@@ -236,131 +141,52 @@ export default function AgendaScreen() {
     setCurrentWeekStart(startOfWeekForSelected);
   }, [selectedDate]);
 
-  // Efeito para rolar (inalterado)
-  useEffect(() => {
-    if (!loading && viewMode === "agenda" && sectionListRef.current) {
-      const datesWithEvents = Object.keys(events);
-      const allDatesSet = new Set(datesWithEvents);
-      allDatesSet.add(todayString);
-      const allSortedDates = Array.from(allDatesSet).sort();
-      const targetSectionIndex = allSortedDates.findIndex(
-        (date) => date >= todayString
-      );
-      if (targetSectionIndex !== -1) {
-        setTimeout(() => {
-          sectionListRef.current?.scrollToLocation({
-            sectionIndex: targetSectionIndex,
-            itemIndex: 0,
-            viewPosition: 0,
-            animated: true,
-          });
-        }, 150);
-      }
-    }
-  }, [loading, viewMode, events, todayString]);
-
-  // --- Função para buscar recomendações ---
-  const generateStudyRecommendations = useCallback(
-    async (disciplina: string, duration: number) => {
-      console.log(
-        `Buscando recomendações para ${disciplina} por ${duration} min.`
-      );
+  const generateEnergyRecommendations = useCallback(
+    async (atividade: string, duration: number) => {
       setRecommendationLoading(true);
-      setRecommendationResult(null); // Limpa resultado anterior
+      setRecommendationResult(null);
 
       try {
-        const userGoal = userProfile?.goal || "Outro";
-        const priorities = coursePriorities;
-        const normalizedDisciplinaId = normalizeDocId(disciplina);
-        let competenciasTexto =
-          "Conteúdo específico da disciplina não encontrado.";
+        const prompt = `
+          O usuário agendou: "${atividade}" (${duration} min).
+          Atue como um especialista em energias, cristais e astrologia.
+          Gere uma recomendação mística curta para potencializar este momento.
+          
+          A resposta deve conter:
+          1. **Cristal**: Uma pedra sugerida.
+          2. **Mantra/Intenção**: Uma frase curta.
+          3. **Dica Astral**: Um conselho breve.
 
-        if (normalizedDisciplinaId) {
-          const disciplinaDocSnap = await getDoc(
-            doc(db, "conteudo_disciplinas", normalizedDisciplinaId)
-          );
-          if (disciplinaDocSnap.exists()) {
-            const data = disciplinaDocSnap.data();
-            competenciasTexto = (data.competencias || [])
-              .map(
-                (comp: any) =>
-                  `Competência ${comp.numero}: ${
-                    comp.descricao || ""
-                  }\nHabilidades: ${(comp.habilidades || [])
-                    .map((h: any) => h.descricao)
-                    .join(", ")}`
-              )
-              .join("\n\n");
-            // Limitar tamanho para não exceder limites do prompt
-            if (competenciasTexto.length > 1500) {
-              competenciasTexto =
-                competenciasTexto.substring(0, 1500) +
-                "... (mais conteúdo disponível)";
-            }
-          }
-        }
-
-        // Usa normalizeDocId também para buscar a prioridade
-        const normalizedPrioKey = normalizeDocId(disciplina);
-        const prioridade =
-          (normalizedPrioKey && priorities?.[normalizedPrioKey]) || 2; // Default 2 (média)
-
-        const promptSegments: string[] = [
-          `Monte um plano de estudo para ${disciplina} com duração total de ${duration} minutos, pensado para o vestibular de ${userGoal}.`,
-          `Divida esse tempo em 2 ou 3 etapas complementares (por exemplo, revisão, exercícios, flashcards), dando alguns minutos a mais quando necessário para preparação, consulta de materiais ou pausa rápida, sempre mencionando o tempo dedicado em cada atividade.`,
-          `Após escolher o conteúdo, selecione um recorte específico (um único conceito, tema ou acontecimento) e foque somente nele; não liste vários tópicos amplos na mesma etapa.`,
-          `Prefira instruções concretas sobre o que fazer naquele recorte (ex.: responder 3 questões sobre "Era Vargas" de um vestibular recente, mapear causa e consequência de um evento, resumir um parágrafo do autor X).`,
-          `Garanta que a soma dos tempos de todas as etapas seja exatamente ${duration} minutos; nunca ofereça etapas que individualmente usem ${duration} minutos ou ultrapassem esse total, mesmo ao adicionar esse tempo extra de preparação.`,
-          `Escreva cada item no formato "XX min – atividade" para deixar claro o tempo reservado.`,
-          `Formate como uma lista numerada simples, sem introdução ou conclusão.`,
-          `A prioridade dessa matéria para este curso é considerada ${
-            prioridade === 3 ? "alta" : prioridade === 2 ? "média" : "baixa"
-          }.`,
-        ];
-
-        if (
-          competenciasTexto !==
-          "Conteúdo específico da disciplina não encontrado."
-        ) {
-          promptSegments.splice(
-            2,
-            0,
-            `Considere as seguintes competências e habilidades gerais: \n${competenciasTexto}`
-          );
-        }
-
-        const prompt = promptSegments.join(" ");
+          Seja místico, acolhedor e direto. Use Markdown.
+        `;
 
         const model = getChatModel();
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
 
-        setRecommendationResult(responseText); // Guarda para exibir
+        setRecommendationResult(responseText);
         return responseText;
       } catch (error) {
-        console.error("Erro ao buscar recomendações:", error);
-        Alert.alert("Erro", "Não foi possível gerar sugestões no momento.");
-        setRecommendationResult(null);
+        Alert.alert("Erro", "Os astros estão silenciosos no momento.");
         return null;
       } finally {
         setRecommendationLoading(false);
       }
     },
-    [userProfile, coursePriorities, getChatModel]
-  ); // Depende do perfil, prioridades e da função do chat
+    [getChatModel]
+  );
 
-  // Handler para adicionar evento (modificado)
   const handleAddEvent = useCallback(
     async (eventData: {
       title: string;
       time: string;
       duration: number;
-      disciplina?: string;
+      energy?: string; // Alterado para energy
       recommend?: boolean;
     }) => {
       if (!currentUser) return;
-      setRecommendationResult(null); // Limpa recomendações antigas
-      setRecommendationLoading(false); // Garante que o loading comece falso
+      setRecommendationResult(null);
+      setRecommendationLoading(false);
 
       try {
         const docData: any = {
@@ -368,15 +194,13 @@ export default function AgendaScreen() {
           time: eventData.time,
           duration: eventData.duration,
           date: selectedDate,
-          createdAt: serverTimestamp(), // Adiciona timestamp de criação
+          createdAt: serverTimestamp(),
         };
-        // Salva a disciplina formatada se existir
-        if (eventData.disciplina) {
-          const normalizedDisciplina = normalizeDocId(eventData.disciplina);
-          if (normalizedDisciplina) {
-            docData.disciplinaId = normalizedDisciplina; // Salva ID normalizado
-            docData.disciplinaNome = eventData.disciplina; // Salva nome original
-          }
+
+        // Salvamos como 'disciplinaNome' no banco para manter compatibilidade de dados,
+        // mas no código tratamos como 'energy'
+        if (eventData.energy) {
+          docData.disciplinaNome = eventData.energy;
         }
 
         const docRef = await addDoc(
@@ -384,130 +208,72 @@ export default function AgendaScreen() {
           docData
         );
         logAddEventCalendar();
-        setModalVisible(false); // Fecha o modal principal primeiro
+        setModalVisible(false);
 
-        // Chama recomendação DEPOIS de fechar o modal e salvar
-        if (eventData.recommend && eventData.disciplina) {
-          const suggestions = await generateStudyRecommendations(
-            // Isso já define recommendationLoading=true
-            eventData.disciplina,
+        if (eventData.recommend && eventData.energy) {
+          const suggestions = await generateEnergyRecommendations(
+            eventData.title + " - " + eventData.energy,
             eventData.duration
           );
           if (suggestions) {
-            try {
-              // Salva a recomendação no evento
-              await updateDoc(docRef, {
-                studyRecommendation: suggestions,
-                recommendationGeneratedAt: serverTimestamp(),
-              });
-              // O estado recommendationResult já foi definido dentro de generateStudyRecommendations
-            } catch (updateError) {
-              console.error(
-                "Erro ao salvar recomendação no evento:",
-                updateError
-              );
-              // Mesmo com erro ao salvar no doc, a recomendação foi gerada e está em recommendationResult
-            }
+            await updateDoc(docRef, {
+              studyRecommendation: suggestions,
+              recommendationGeneratedAt: serverTimestamp(),
+            });
           }
         }
       } catch (error: any) {
-        console.error("Erro ao adicionar evento:", error);
-        Alert.alert("Erro", "Não foi possível salvar o evento.");
-        setRecommendationLoading(false); // Garante que loading pare em caso de erro no addDoc
-        setRecommendationResult(null); // Limpa resultado em caso de erro
+        Alert.alert("Erro", "Não foi possível salvar o ritual.");
+        setRecommendationLoading(false);
       }
     },
-    [currentUser, selectedDate, generateStudyRecommendations] // Adiciona dependência
+    [currentUser, selectedDate, generateEnergyRecommendations]
   );
 
-  // Handler para deletar evento (inalterado)
   const handleDeleteEvent = useCallback(
     async (eventId: string) => {
-      if (!currentUser) return; // Checa usuário
-      Alert.alert(
-        "Confirmar Exclusão",
-        "Tem certeza que deseja excluir este evento?",
-        [
-          { text: "Cancelar", style: "cancel" },
-          {
-            text: "Excluir",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                await deleteDoc(
-                  doc(db, "users", currentUser.uid, "events", eventId)
-                ); // Usa currentUser.uid
-                logDeleteEventCalendar();
-              } catch (error) {
-                console.error("Erro ao deletar evento: ", error);
-                Alert.alert("Erro", "Não foi possível excluir o evento.");
-              }
-            },
+      if (!currentUser) return;
+      Alert.alert("Desfazer Ritual", "Deseja remover este evento?", [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Remover",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(
+                doc(db, "users", currentUser.uid, "events", eventId)
+              );
+              logDeleteEventCalendar();
+            } catch (error) {
+              Alert.alert("Erro", "Não foi possível excluir.");
+            }
           },
-        ]
-      );
+        },
+      ]);
     },
     [currentUser]
   );
 
-  // Handler para mudar de semana (inalterado)
   const handleWeekChange = (direction: "prev" | "next") => {
     const [year, month, day] = selectedDate.split("-").map(Number);
     const currentDateObj = new Date(year, month - 1, day);
     currentDateObj.setDate(
       currentDateObj.getDate() + (direction === "prev" ? -7 : 7)
     );
-    setSelectedDate(formatDate(currentDateObj)); // Atualiza a data selecionada
+    setSelectedDate(formatDate(currentDateObj));
   };
 
-  // --- Regras para o Markdown com Tipos Corretos e Estilos Explícitos ---
   const markdownRules = useMemo(
     () => ({
-      // Regra para **texto** (negrito)
-      strong: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        styles: any
-      ) => (
+      strong: (node: MarkdownNode, children: any) => (
         <Text
           key={node.key}
-          style={{
-            fontWeight: "bold",
-            color: themeColors.text,
-            fontSize: 15, // <- Adicionado explicitamente
-            lineHeight: 22, // <- Adicionado explicitamente
-          }}
+          style={{ fontWeight: "bold", color: themeColors.text, fontSize: 15 }}
         >
           {children}
         </Text>
       ),
-      // Regra para *texto* (itálico)
-      em: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        styles: any
-      ) => (
-        <Text
-          key={node.key}
-          style={{
-            fontStyle: "italic",
-            color: themeColors.text,
-            fontSize: 15, // <- Adicionado explicitamente
-            lineHeight: 22, // <- Adicionado explicitamente
-          }}
-        >
-          {children}
-        </Text>
-      ),
-      // Regra base para texto
-      text: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        styles: any
-      ) => (
+      text: (node: MarkdownNode) => (
         <Text
           key={node.key}
           style={{ color: themeColors.text, fontSize: 15, lineHeight: 22 }}
@@ -515,38 +281,11 @@ export default function AgendaScreen() {
           {node.content}
         </Text>
       ),
-      // Regra para itens de lista
-      list_item: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        styles: any
-      ) => (
-        <View key={node.key} style={styles.listItemStyle}>
-          {/* Adicionado espaço após o marcador */}
-          <Text
-            style={{
-              color: themeColors.text,
-              marginRight: 5,
-              lineHeight: 22,
-              fontSize: 15,
-            }}
-          >
-            {parent.type === "bullet_list" ? "• " : `${node.index + 1}. `}
-          </Text>
+      list_item: (node: MarkdownNode, children: any) => (
+        <View key={node.key} style={{ flexDirection: "row", marginBottom: 5 }}>
+          <Text style={{ color: themeColors.text, marginRight: 5 }}>•</Text>
           <View style={{ flex: 1 }}>{children}</View>
         </View>
-      ),
-      // Regra para parágrafo para garantir espaçamento entre blocos
-      paragraph: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        styles: any
-      ) => (
-        <View key={node.key} style={{ marginTop: 5, marginBottom: 10 }}>
-          {children}
-        </View> // Aumentado marginBottom
       ),
     }),
     [themeColors.text]
@@ -555,7 +294,6 @@ export default function AgendaScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex} edges={["top", "left", "right"]}>
-        {/* Header com botões de toggle e adicionar */}
         <View style={styles.header}>
           <View
             style={[
@@ -578,7 +316,7 @@ export default function AgendaScreen() {
                   { color: viewMode === "agenda" ? "#fff" : themeColors.text },
                 ]}
               >
-                Agenda
+                Rituais
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -594,11 +332,10 @@ export default function AgendaScreen() {
                   { color: viewMode === "day" ? "#fff" : themeColors.text },
                 ]}
               >
-                Dia
+                Ciclo
               </Text>
             </TouchableOpacity>
           </View>
-
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: themeColors.accent }]}
             onPress={() => setModalVisible(true)}
@@ -607,7 +344,6 @@ export default function AgendaScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Seletor de Semana */}
         <WeekSelector
           currentWeekStart={currentWeekStart}
           selectedDate={selectedDate}
@@ -615,7 +351,6 @@ export default function AgendaScreen() {
           onWeekChange={handleWeekChange}
         />
 
-        {/* Conteúdo Principal (Lista ou Timeline) */}
         <View style={styles.contentContainer}>
           {loading ? (
             <ActivityIndicator
@@ -639,26 +374,25 @@ export default function AgendaScreen() {
           )}
         </View>
 
-        {/* Modal de Adicionar Evento (passa a prop onAddEvent atualizada) */}
         <AddEventModal
           isVisible={modalVisible}
           onClose={() => setModalVisible(false)}
-          onAddEvent={handleAddEvent} // Passa o handleAddEvent atualizado
+          onAddEvent={handleAddEvent}
           selectedDate={selectedDate}
         />
 
-        {/* ----- NOVO Modal para Exibir Recomendação ----- */}
         <Modal
           transparent
           animationType="fade"
-          visible={!!recommendationResult || recommendationLoading} // Visível se estiver carregando ou tiver resultado
-          onRequestClose={() => setRecommendationResult(null)} // Opcional: fechar ao pressionar back
+          visible={!!recommendationResult || recommendationLoading}
+          onRequestClose={() => setRecommendationResult(null)}
         >
           <View style={styles.recommendationModalBackdrop}>
             <ThemedView
-              lightColor={Colors.light.card}
-              darkColor={Colors.dark.card}
-              style={styles.recommendationModalContent}
+              style={[
+                styles.recommendationModalContent,
+                { backgroundColor: themeColors.card },
+              ]}
             >
               {recommendationLoading && (
                 <>
@@ -666,7 +400,7 @@ export default function AgendaScreen() {
                   <ThemedText
                     style={[styles.recommendationTitle, { marginTop: 15 }]}
                   >
-                    Gerando sugestões...
+                    Consultando os astros...
                   </ThemedText>
                 </>
               )}
@@ -677,24 +411,21 @@ export default function AgendaScreen() {
                       type="subtitle"
                       style={styles.recommendationTitle}
                     >
-                      Sugestões de Estudo:
+                      Orientação Cósmica:
                     </ThemedText>
-                    {/* ----- USANDO rules EM VEZ DE style ----- */}
                     <Markdown rules={markdownRules}>
                       {recommendationResult}
                     </Markdown>
                   </ScrollView>
-                  <View style={styles.modalButtonContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.modalOkButton,
-                        { backgroundColor: themeColors.accent },
-                      ]}
-                      onPress={() => setRecommendationResult(null)}
-                    >
-                      <Text style={styles.modalOkButtonText}>Ok</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalOkButton,
+                      { backgroundColor: themeColors.accent },
+                    ]}
+                    onPress={() => setRecommendationResult(null)}
+                  >
+                    <Text style={styles.modalOkButtonText}>Gratidão</Text>
+                  </TouchableOpacity>
                 </>
               )}
             </ThemedView>
@@ -705,7 +436,6 @@ export default function AgendaScreen() {
   );
 }
 
-// Estilos
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
@@ -725,16 +455,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(128,128,128,0.1)",
   },
-  toggleButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 25,
-    borderRadius: 16,
-  },
-  toggleButtonText: {
-    fontWeight: "bold",
-    fontSize: 14,
-    textAlign: "center",
-  },
+  toggleButton: { paddingVertical: 8, paddingHorizontal: 25, borderRadius: 16 },
+  toggleButtonText: { fontWeight: "bold", fontSize: 14, textAlign: "center" },
   addButton: {
     position: "absolute",
     right: 20,
@@ -756,25 +478,18 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     marginTop: -2,
   },
-  contentContainer: {
-    flex: 1,
-  },
-  loadingIndicator: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  // Estilos para o MODAL da recomendação
+  contentContainer: { flex: 1 },
+  loadingIndicator: { flex: 1, justifyContent: "center", alignItems: "center" },
   recommendationModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)", // Fundo escurecido
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 30, // Espaçamento das bordas
+    padding: 30,
   },
   recommendationModalContent: {
     width: "100%",
-    maxHeight: "75%", // Limita a altura máxima
+    maxHeight: "75%",
     borderRadius: 15,
     padding: 20,
     shadowColor: "#000",
@@ -782,39 +497,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    alignItems: "center", // Centraliza o ActivityIndicator
+    alignItems: "center",
   },
-  recommendationScrollView: {
-    // Para permitir scroll do texto longo
-    width: "100%",
-    marginBottom: 15, // Espaço antes do botão
-  },
+  recommendationScrollView: { width: "100%", marginBottom: 15 },
   recommendationTitle: {
-    marginBottom: 15, // Aumenta espaço abaixo do título
+    marginBottom: 15,
     textAlign: "center",
-    fontWeight: "bold", // Deixa o título em negrito
-  },
-  modalButtonContainer: {
-    // Container para o botão OK
-    width: "100%",
-    alignItems: "center", // Centraliza o botão
-    marginTop: 10,
+    fontWeight: "bold",
   },
   modalOkButton: {
     paddingVertical: 12,
     paddingHorizontal: 40,
     borderRadius: 8,
+    marginTop: 10,
   },
-  modalOkButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  listItemStyle: {
-    // Estilo para a regra list_item do Markdown
-    flexDirection: "row",
-    marginBottom: 8,
-    // Garante que o texto dentro do item possa quebrar linha
-    flexWrap: "wrap",
-  },
+  modalOkButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
 });

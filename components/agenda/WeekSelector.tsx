@@ -25,33 +25,53 @@ export const WeekSelector = ({
 
   const firstDay = weekDays[0];
   const lastDay = weekDays[6];
-  const firstMonth = firstDay.toLocaleDateString("pt-BR", { month: "long" });
-  const lastMonth = lastDay.toLocaleDateString("pt-BR", { month: "long" });
 
-  let monthLabel = firstMonth;
-  if (firstMonth !== lastMonth) {
-    monthLabel = `${firstMonth.substring(0, 3)} / ${lastMonth.substring(0, 3)}`;
-  }
-  monthLabel = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+  // Formatação de Mês mais elegante
+  const monthNames = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+  const monthLabel = monthNames[firstDay.getMonth()];
+  const yearLabel = firstDay.getFullYear();
 
   return (
     <View style={styles.container}>
       <View style={styles.monthHeader}>
-        <ThemedText style={styles.monthLabel}>
-          {monthLabel} {firstDay.getFullYear()}
-        </ThemedText>
+        <View>
+          <ThemedText style={styles.monthLabel}>
+            {monthLabel} {yearLabel}
+          </ThemedText>
+        </View>
         <View style={styles.navButtons}>
-          <TouchableOpacity onPress={() => onWeekChange("prev")} hitSlop={20}>
+          <TouchableOpacity
+            onPress={() => onWeekChange("prev")}
+            hitSlop={20}
+            style={styles.navBtn}
+          >
             <MaterialIcons
               name="chevron-left"
-              size={28}
+              size={24}
               color={themeColors.text}
             />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => onWeekChange("next")} hitSlop={20}>
+          <TouchableOpacity
+            onPress={() => onWeekChange("next")}
+            hitSlop={20}
+            style={styles.navBtn}
+          >
             <MaterialIcons
               name="chevron-right"
-              size={28}
+              size={24}
               color={themeColors.text}
             />
           </TouchableOpacity>
@@ -63,9 +83,8 @@ export const WeekSelector = ({
           const dayString = formatDate(day);
           const isSelected = dayString === selectedDate;
           const dayAbbr = day
-            .toLocaleDateString("pt-BR", { weekday: "short" })
-            .substring(0, 3)
-            .toUpperCase();
+            .toLocaleDateString("pt-BR", { weekday: "narrow" })
+            .toUpperCase(); // D, S, T...
 
           return (
             <TouchableOpacity
@@ -76,7 +95,10 @@ export const WeekSelector = ({
               <ThemedText
                 style={[
                   styles.dayAbbreviation,
-                  { color: isSelected ? themeColors.accent : themeColors.icon },
+                  {
+                    color: isSelected ? themeColors.accent : themeColors.icon,
+                    fontWeight: isSelected ? "bold" : "normal",
+                  },
                 ]}
               >
                 {dayAbbr}
@@ -84,19 +106,26 @@ export const WeekSelector = ({
               <View
                 style={[
                   styles.dateCircle,
-                  isSelected && { backgroundColor: themeColors.accent },
+                  isSelected
+                    ? { backgroundColor: themeColors.accent }
+                    : { backgroundColor: "transparent" },
                 ]}
               >
                 <Text
                   style={[
                     styles.dateNumber,
-                    { color: themeColors.text },
-                    isSelected && { color: "#fff" },
+                    { color: isSelected ? "#fff" : themeColors.text },
                   ]}
                 >
                   {day.getDate()}
                 </Text>
               </View>
+              {/* Ponto indicador se tiver evento (simulado visualmente para consistência) */}
+              {isSelected && (
+                <View
+                  style={[styles.dot, { backgroundColor: themeColors.accent }]}
+                />
+              )}
             </TouchableOpacity>
           );
         })}
@@ -107,51 +136,40 @@ export const WeekSelector = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 10,
+    paddingBottom: 15,
     borderBottomWidth: 1,
-    borderColor: "rgba(128,128,128,0.1)",
+    borderColor: "rgba(128,128,128,0.05)",
   },
   monthHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 10,
-    paddingBottom: 15,
+    paddingBottom: 20,
   },
-  monthLabel: {
-    fontSize: 20,
-    fontWeight: "bold",
-    textTransform: "capitalize",
-  },
-  navButtons: {
-    flexDirection: "row",
+  monthLabel: { fontSize: 18, fontWeight: "700", letterSpacing: 0.5 },
+  navButtons: { flexDirection: "row", gap: 10 },
+  navBtn: {
+    padding: 4,
+    backgroundColor: "rgba(128,128,128,0.1)",
+    borderRadius: 8,
   },
   weekDaysContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    paddingHorizontal: 10,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
   },
-  dayItem: {
-    alignItems: "center",
-    padding: 4,
-    borderRadius: 20,
-  },
-  dayAbbreviation: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 8,
-    opacity: 0.8,
-  },
+  dayItem: { alignItems: "center", width: 40 },
+  dayAbbreviation: { fontSize: 11, marginBottom: 8, opacity: 0.6 },
   dateCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 4,
   },
-  dateNumber: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  dateNumber: { fontSize: 15, fontWeight: "500" },
+  dot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
 });

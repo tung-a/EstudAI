@@ -19,7 +19,7 @@ export default function AdminTabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: "Dashboard",
+          title: "Painel",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="chart.bar.fill" color={color} />
           ),
@@ -28,7 +28,7 @@ export default function AdminTabLayout() {
       <Tabs.Screen
         name="users"
         options={{
-          title: "Usuários",
+          title: "Viajantes",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="person.3.fill" color={color} />
           ),
@@ -37,7 +37,7 @@ export default function AdminTabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Perfil",
+          title: "Mestre",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="person.fill" color={color} />
           ),

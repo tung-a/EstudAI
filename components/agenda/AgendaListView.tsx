@@ -1,4 +1,3 @@
-// components/agenda/AgendaListView.tsx
 import { Event } from "@/app/(user)/agenda";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
@@ -10,21 +9,16 @@ import {
   SectionList,
   SectionListProps,
   StyleSheet,
-  Text, // Importar Text
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
-// Ajuste na importação para incluir tipos necessários para rules
-import Markdown, {
-  MarkdownNode,
-  MarkdownRules,
-  RenderState,
-} from "react-native-markdown-display";
+import Markdown, { MarkdownNode } from "react-native-markdown-display";
 
 type AgendaListViewProps = {
-  events: { [date: string]: Event[] }; // Tipo EventsByDate inline ou importado
+  events: { [date: string]: Event[] };
   onDeleteEvent: (eventId: string) => void;
-  todayString: string; // Data de hoje no formato YYYY-MM-DD
+  todayString: string;
 } & Pick<
   SectionListProps<Event>,
   "ListHeaderComponent" | "stickySectionHeadersEnabled"
@@ -39,7 +33,6 @@ export const AgendaListView = forwardRef<
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const sections = useMemo(() => {
-    // ... (lógica das seções inalterada) ...
     const datesWithEvents = Object.keys(events);
     const allDatesSet = new Set(datesWithEvents);
     allDatesSet.add(todayString);
@@ -50,113 +43,38 @@ export const AgendaListView = forwardRef<
     }));
   }, [events, todayString]);
 
-  // --- Estilo Base Dinâmico para Texto Markdown ---
-  const baseTextStyle = useMemo(
+  const markdownRules: any = useMemo(
     () => ({
-      color: themeColors.text,
-      fontSize: 13,
-      lineHeight: 18,
-    }),
-    [themeColors.text]
-  );
-
-  // --- Regras para o Markdown ---
-  // Tipar o objeto de regras com MarkdownRules
-  const markdownRules: MarkdownRules = useMemo(
-    () => ({
-      // Regra para **texto** (negrito)
-      strong: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => (
-        // Aplicar estilo base + negrito
-        <Text key={node.key} style={[baseTextStyle, { fontWeight: "bold" }]}>
+      strong: (node: MarkdownNode, children: any) => (
+        <Text
+          key={node.key}
+          style={{ fontWeight: "bold", color: themeColors.text, fontSize: 13 }}
+        >
           {children}
         </Text>
       ),
-      // Regra para *texto* (itálico)
-      em: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => (
-        // Aplicar estilo base + itálico
-        <Text key={node.key} style={[baseTextStyle, { fontStyle: "italic" }]}>
-          {children}
+      text: (node: MarkdownNode) => (
+        <Text
+          key={node.key}
+          style={{ color: themeColors.text, fontSize: 13, lineHeight: 18 }}
+        >
+          {node.content}
         </Text>
       ),
-      // Regra fundamental para texto puro - APLICA ESTILOS BASE AQUI
-      // Esta regra é crucial para evitar o erro "Text strings must be rendered..."
-      text: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => {
-        // A regra 'text' recebe o conteúdo diretamente em node.content
-        // Não precisa processar 'children' aqui, apenas retornar o <Text> formatado
-        return (
-          <Text key={node.key} style={baseTextStyle}>
-            {String(node.content)} {/* Garante que é string */}
-          </Text>
-        );
-      },
-      // Regra para itens de lista
-      list_item: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => (
-        <View key={node.key} style={styles.listItemStyle}>
-          {/* Marcador usa o estilo base */}
-          <Text style={[baseTextStyle, { marginRight: 5 }]}>
-            {parent.type === "bullet_list"
-              ? "• "
-              : `${node.index != null ? node.index + 1 : 0}. `}
-          </Text>
-          {/* A View contém os children processados por outras regras (incluindo 'text') */}
+      list_item: (node: MarkdownNode, children: any) => (
+        <View key={node.key} style={{ flexDirection: "row" }}>
+          <Text style={{ color: themeColors.text, marginRight: 5 }}>•</Text>
           <View style={{ flex: 1 }}>{children}</View>
         </View>
       ),
-      // Regra para parágrafo - apenas adiciona margem
-      paragraph: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => (
-        <View key={node.key} style={{ marginBottom: 8 }}>
-          {children}
-        </View>
-      ),
-      // Adiciona regras para as listas apenas para margens
-      bullet_list: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => (
-        <View key={node.key} style={{ marginBottom: 8 }}>
-          {children}
-        </View>
-      ),
-      ordered_list: (
-        node: MarkdownNode,
-        children: React.ReactNode,
-        parent: MarkdownNode,
-        state: RenderState
-      ) => (
-        <View key={node.key} style={{ marginBottom: 8 }}>
+      paragraph: (node: MarkdownNode, children: any) => (
+        <View key={node.key} style={{ marginBottom: 5 }}>
           {children}
         </View>
       ),
     }),
-    [themeColors.text, baseTextStyle]
-  ); // Adicionado baseTextStyle como dependência
+    [themeColors.text]
+  );
 
   return (
     <SectionList
@@ -167,18 +85,35 @@ export const AgendaListView = forwardRef<
       contentContainerStyle={styles.listContentContainer}
       renderSectionHeader={({ section: { title, data } }) => (
         <View style={styles.sectionHeaderContainer}>
-          <ThemedText
-            style={[
-              styles.sectionHeader,
-              title === todayString && styles.todayHeader,
-              data.length === 0 && styles.emptySectionHeader,
-            ]}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingTop: 25,
+              paddingBottom: 10,
+            }}
           >
-            {formatHeaderTitle(title)}
-          </ThemedText>
+            <MaterialIcons
+              name="auto-awesome"
+              size={14}
+              color={
+                title === todayString ? themeColors.accent : themeColors.icon
+              }
+            />
+            <ThemedText
+              style={[
+                styles.sectionHeader,
+                title === todayString && { color: themeColors.accent },
+                data.length === 0 && styles.emptySectionHeader,
+              ]}
+            >
+              {formatHeaderTitle(title)}
+            </ThemedText>
+          </View>
           {data.length === 0 && sections.length > 0 && (
             <ThemedText style={styles.emptySectionText}>
-              Nenhum evento para este dia.
+              O silêncio reina no cosmos.
             </ThemedText>
           )}
         </View>
@@ -190,11 +125,8 @@ export const AgendaListView = forwardRef<
         return (
           <TouchableOpacity
             onPress={() => {
-              if (hasRecommendation) {
-                setExpandedEventId((current) =>
-                  current === item.id ? null : item.id
-                );
-              }
+              if (hasRecommendation)
+                setExpandedEventId((c) => (c === item.id ? null : item.id));
             }}
             onLongPress={() => onDeleteEvent(item.id)}
             style={[
@@ -203,52 +135,85 @@ export const AgendaListView = forwardRef<
             ]}
             activeOpacity={hasRecommendation ? 0.7 : 1}
           >
-            <View style={styles.eventTimeDetails}>
-              <ThemedText style={styles.agendaEventTime}>
-                {item.time}
-              </ThemedText>
-              <ThemedText style={styles.agendaEventDuration}>
-                {formatDuration(item.duration)}
-              </ThemedText>
-            </View>
             <View
               style={[
-                styles.eventTitleBar,
+                styles.accentLine,
                 { backgroundColor: themeColors.accent },
               ]}
             />
-            <View style={styles.agendaEventTitleContainer}>
-              <ThemedText style={styles.agendaEventTitle} numberOfLines={2}>
-                {item.title}
-              </ThemedText>
-              {item.disciplinaNome && (
-                <ThemedText
-                  style={styles.agendaEventSubtitle}
-                  numberOfLines={1}
-                >
-                  {item.disciplinaNome}
+
+            <View style={styles.contentWrapper}>
+              <View style={styles.topRow}>
+                <ThemedText style={styles.agendaEventTitle} numberOfLines={1}>
+                  {item.title}
                 </ThemedText>
-              )}
+                <View
+                  style={[
+                    styles.timeBadge,
+                    { backgroundColor: themeColors.background },
+                  ]}
+                >
+                  <ThemedText style={{ fontSize: 12, fontWeight: "600" }}>
+                    {item.time}
+                  </ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.subRow}>
+                <MaterialIcons
+                  name="hourglass-empty"
+                  size={12}
+                  color={themeColors.icon}
+                />
+                <ThemedText style={styles.agendaEventDuration}>
+                  {formatDuration(item.duration)}
+                </ThemedText>
+                {/* CORREÇÃO: Usando item.energy em vez de disciplinaNome */}
+                {item.energy && (
+                  <>
+                    <ThemedText style={styles.dotSeparator}>•</ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.agendaEventSubtitle,
+                        { color: themeColors.accent },
+                      ]}
+                    >
+                      {item.energy}
+                    </ThemedText>
+                  </>
+                )}
+              </View>
+
               {hasRecommendation && (
                 <View
                   style={[
                     styles.recommendationSection,
-                    { borderColor: themeColors.icon + "30" },
+                    { borderColor: themeColors.icon + "15" },
                   ]}
                 >
                   <View style={styles.recommendationHeader}>
-                    <ThemedText style={styles.recommendationLabel}>
-                      Sugestão de estudo
+                    <MaterialIcons
+                      name="stars"
+                      size={14}
+                      color={themeColors.accent}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.recommendationLabel,
+                        { color: themeColors.accent },
+                      ]}
+                    >
+                      Orientação Astral
                     </ThemedText>
                     <MaterialIcons
                       name={isExpanded ? "expand-less" : "expand-more"}
                       size={20}
                       color={themeColors.icon}
+                      style={{ marginLeft: "auto" }}
                     />
                   </View>
                   {isExpanded && (
                     <View style={styles.recommendationTextContainer}>
-                      {/* Removido style prop, usando apenas rules */}
                       <Markdown rules={markdownRules}>
                         {item.studyRecommendation || ""}
                       </Markdown>
@@ -263,12 +228,15 @@ export const AgendaListView = forwardRef<
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
           <MaterialIcons
-            name="event-busy"
-            size={40}
-            color={themeColors.icon + "80"}
+            name="nights-stay"
+            size={48}
+            color={themeColors.icon + "40"}
           />
           <ThemedText style={styles.noEventsText}>
-            Nenhum evento agendado.
+            Nenhum ritual agendado.
+          </ThemedText>
+          <ThemedText style={styles.noEventsSubText}>
+            Toque em + para manifestar.
           </ThemedText>
         </View>
       }
@@ -287,99 +255,76 @@ const styles = StyleSheet.create({
   },
   sectionHeaderContainer: {},
   sectionHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    paddingTop: 25,
-    paddingBottom: 8,
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "capitalize",
   },
-  todayHeader: {
-    color: Colors.light.tint,
-  },
-  emptySectionHeader: {
-    opacity: 0.8,
-  },
+  emptySectionHeader: { opacity: 0.5 },
   emptySectionText: {
-    fontSize: 14,
-    opacity: 0.6,
+    fontSize: 13,
+    opacity: 0.5,
     fontStyle: "italic",
     paddingBottom: 15,
+    paddingLeft: 24,
   },
   agendaEventItem: {
     flexDirection: "row",
-    borderRadius: 12,
-    marginBottom: 10,
-    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 6,
+    elevation: 2,
+    overflow: "hidden",
   },
-  eventTimeDetails: {
-    width: 65,
-    alignItems: "flex-start",
-    paddingTop: 2,
+  accentLine: { width: 6, height: "100%" },
+  contentWrapper: { flex: 1, padding: 16 },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
   },
-  agendaEventTime: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  agendaEventDuration: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  eventTitleBar: {
-    width: 4,
-    minHeight: 40,
-    borderRadius: 2,
-    marginRight: 12,
-    alignSelf: "stretch",
-  },
-  agendaEventTitleContainer: {
-    flex: 1,
-  },
+  subRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  timeBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  agendaEventTime: { fontSize: 16, fontWeight: "bold" },
+  agendaEventDuration: { fontSize: 12, opacity: 0.7 },
   agendaEventTitle: {
     fontSize: 16,
+    fontWeight: "600",
+    flex: 1,
+    marginRight: 10,
   },
-  agendaEventSubtitle: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginTop: 2,
-  },
+  agendaEventSubtitle: { fontSize: 12, fontWeight: "500" },
+  dotSeparator: { fontSize: 10, opacity: 0.4, marginHorizontal: 2 },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    minHeight: 200,
+    minHeight: 300,
   },
   noEventsText: {
     textAlign: "center",
     marginTop: 15,
-    fontSize: 16,
-    opacity: 0.7,
+    fontSize: 18,
+    fontWeight: "500",
+    opacity: 0.8,
   },
-  recommendationSection: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  noEventsSubText: {
+    textAlign: "center",
+    marginTop: 5,
+    fontSize: 14,
+    opacity: 0.5,
   },
-  recommendationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  recommendationSection: { marginTop: 12, paddingTop: 10, borderTopWidth: 1 },
+  recommendationHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
   recommendationLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
-    opacity: 0.9,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  recommendationTextContainer: {
-    marginTop: 8,
-  },
-  listItemStyle: {
-    flexDirection: "row",
-    marginBottom: 5,
-    flexWrap: "wrap",
-  },
+  recommendationTextContainer: { marginTop: 8 },
+  listItemStyle: { flexDirection: "row", marginBottom: 5, flexWrap: "wrap" },
 });

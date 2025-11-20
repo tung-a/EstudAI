@@ -1,212 +1,141 @@
-// app/(user)/profile.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
+import { useChat } from "@/contexts/ChatContext";
 import { auth, db } from "@/firebaseConfig";
-// useAuth não é mais necessário aqui se não precisarmos do timezone
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
-import { signOut } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
-import React, { useEffect, useState } from "react"; // Removido useMemo se não for mais usado
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList, // Pode remover se não usar mais (curso usa FlatList agora)
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type UserProfile = {
-  name: string;
-  email: string;
-  age?: string;
-  school?: string;
-  goal?: string;
-  // timezone?: string; // Removido do tipo
+// Tipos
+type AstralPosition = {
+  planet: string;
+  sign: string;
+  house: string;
+  element: string;
+  summary: string;
 };
 
-// Remover a função getTimezones se não for mais usada em nenhum lugar
+type UserProfile = {
+  name: string;
+  birthDate?: string;
+  birthTime?: string;
+  birthPlace?: string;
+  astralMapJson?: string;
+};
 
-export default function ProfileScreen() {
-  // Remover estados relacionados ao timezone
+export default function AstralMapScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditingInfo, setIsEditingInfo] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [courses, setCourses] = useState<string[]>([]);
-  const [coursesLoading, setCoursesLoading] = useState(false);
-  const [courseModalVisible, setCourseModalVisible] = useState(false);
-  // Remover: timezoneModalVisible, timezoneSearch, savingTimezone, currentTimezone
 
-  // Estados temporários para edição (sem timezone)
-  const [editableAge, setEditableAge] = useState("");
-  const [editableSchool, setEditableSchool] = useState("");
-  const [editableGoal, setEditableGoal] = useState("");
-  // Remover: editableTimezone
+  // Estado do Mapa
+  const [mapLoading, setMapLoading] = useState(false);
+  const [astralMap, setAstralMap] = useState<AstralPosition[]>([]);
 
+  const { getChatModel } = useChat();
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 
-  // Efeito para buscar perfil (sem lógica de timezone)
+  // 1. Carregar dados
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      setLoading(true);
+    const loadData = async () => {
       const user = auth.currentUser;
-      if (user) {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
+      if (!user) return;
 
-        if (docSnap.exists()) {
-          const data = docSnap.data() as Omit<UserProfile, "timezone">; // Ajusta o tipo
-          setProfile(data);
-          setEditableAge(data.age || "");
-          setEditableSchool(data.school || "");
-          setEditableGoal(data.goal || "");
-        } else {
-          setProfile({
-            name: user.displayName || "Usuário",
-            email: user.email || "",
-            // timezone removido
-          });
-          setEditableAge("");
-          setEditableSchool("");
-          setEditableGoal("");
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data() as UserProfile;
+        setProfile(data);
+
+        // Se já existe mapa salvo, carrega direto
+        if (data.astralMapJson) {
+          try {
+            setAstralMap(JSON.parse(data.astralMapJson));
+          } catch (e) {
+            console.error("Erro parsing mapa", e);
+          }
         }
-      } else {
-        setProfile(null);
       }
       setLoading(false);
     };
-
-    // Apenas checa se currentUser existe, useAuth não é mais necessário aqui
-    if (auth.currentUser) {
-      fetchUserProfile();
-    } else {
-      setLoading(false); // Garante que loading termine se não houver usuário
-    }
-    // Remove authUser da dependência
-  }, []); // Executa apenas uma vez ao montar
-
-  // Efeito para resetar edição (inalterado)
-  useEffect(() => {
-    if (!isEditingInfo) {
-      setCourseModalVisible(false);
-      // Reseta campos editáveis para os valores atuais do perfil ao cancelar
-      if (profile) {
-        setEditableAge(profile.age || "");
-        setEditableSchool(profile.school || "");
-        setEditableGoal(profile.goal || "");
-      }
-    }
-  }, [isEditingInfo, profile]);
-
-  // Efeito para buscar cursos (lógica inalterada)
-  useEffect(() => {
-    let isMounted = true;
-    const fetchCourses = async () => {
-      setCoursesLoading(true);
-      try {
-        const snapshot = await getDocs(collection(db, "prioridades_cursos"));
-        if (!isMounted) return;
-        const loadedCourses = snapshot.docs
-          .map((courseDoc) => courseDoc.data()?.nomeCurso)
-          .filter(
-            (name): name is string =>
-              typeof name === "string" && name.trim().length > 0
-          )
-          .map((name) => name.trim())
-          .reduce<string[]>((acc, name) => {
-            const lower = name.toLowerCase();
-            if (!acc.some((existing) => existing.toLowerCase() === lower)) {
-              acc.push(name);
-            }
-            return acc;
-          }, [])
-          .sort((a, b) => a.localeCompare(b, "pt-BR"));
-        setCourses(loadedCourses);
-      } catch (error) {
-        console.error("Erro ao carregar cursos:", error);
-        if (isMounted) {
-          Alert.alert("Erro", "Não foi possível carregar a lista de cursos.");
-        }
-      } finally {
-        if (isMounted) {
-          setCoursesLoading(false);
-        }
-      }
-    };
-    fetchCourses();
-    return () => {
-      isMounted = false;
-    };
+    loadData();
   }, []);
 
-  // Handler de Logout (lógica inalterada)
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      // Navegação tratada pelo _layout raiz
-    } catch (error: any) {
-      Alert.alert("Erro", "Não foi possível fazer o logout.", error);
+  // 2. Função para Gerar o Mapa (se não existir)
+  const generateMap = async () => {
+    if (!profile?.birthDate) {
+      Alert.alert(
+        "Dados Faltando",
+        "Você precisa preencher seus dados de nascimento primeiro."
+      );
+      return;
     }
-  };
 
-  // Handler para salvar (sem timezone)
-  const handleSaveInfo = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    setSaving(true);
+    setMapLoading(true);
     try {
-      const userDocRef = doc(db, "users", user.uid);
-      await updateDoc(userDocRef, {
-        age: editableAge,
-        school: editableSchool,
-        goal: editableGoal,
-        // timezone: editableTimezone, // Removido
-      });
-      // Atualiza estado local otimisticamente
-      setProfile((prevProfile) => ({
-        ...prevProfile!,
-        age: editableAge,
-        school: editableSchool,
-        goal: editableGoal,
-        // timezone removido
-      }));
-      setIsEditingInfo(false);
-      Alert.alert("Sucesso", "Informações atualizadas!");
-    } catch (error: any) {
-      Alert.alert("Erro", "Não foi possível salvar as alterações.", error);
+      const model = getChatModel();
+      const prompt = `
+        Atue como um astrólogo profissional.
+        Dados de nascimento: ${profile.birthPlace}, dia ${profile.birthDate} às ${profile.birthTime}.
+        
+        Calcule as posições planetárias (Sol, Lua, Ascendente, Mercúrio, Vênus, Marte).
+        Retorne APENAS um JSON válido contendo uma lista de objetos:
+        [{"planet": "Sol", "sign": "Leão", "house": "Casa 5", "element": "Fogo", "summary": "Frase curta sobre o significado."}]
+        
+        Não use markdown. Apenas o JSON cru.
+      `;
+
+      const result = await model.generateContent(prompt);
+      let text = result.response
+        .text()
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+      const mapData = JSON.parse(text);
+      setAstralMap(mapData);
+
+      // Salvar
+      const user = auth.currentUser;
+      if (user) {
+        await updateDoc(doc(db, "users", user.uid), {
+          astralMapJson: JSON.stringify(mapData),
+          zodiacSign: mapData.find((p: any) => p.planet === "Sol")?.sign,
+        });
+      }
+    } catch (error) {
+      Alert.alert("Erro", "Os astros estão nublados. Tente novamente.");
     } finally {
-      setSaving(false);
+      setMapLoading(false);
     }
   };
 
-  // Handler para selecionar curso (inalterado)
-  const handleSelectCourse = (courseName: string) => {
-    setEditableGoal(courseName);
-    setCourseModalVisible(false);
+  // Helper visual
+  const getElementColor = (element: string) => {
+    const el = element.toLowerCase();
+    if (el.includes("fogo")) return "#FF5722";
+    if (el.includes("água")) return "#2196F3";
+    if (el.includes("ar")) return "#FFC107";
+    if (el.includes("terra")) return "#4CAF50";
+    return themeColors.text;
   };
 
-  // Remover handler handleSelectTimezone
-
-  // Indicador de loading inicial
   if (loading) {
     return (
-      <ThemedView style={styles.loadingContainer}>
+      <ThemedView style={styles.centered}>
         <ActivityIndicator size="large" color={themeColors.accent} />
       </ThemedView>
     );
@@ -216,490 +145,195 @@ export default function ProfileScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Header */}
+          {/* Cabeçalho da Seção */}
           <View style={styles.header}>
-            <View
-              style={[styles.avatar, { backgroundColor: themeColors.card }]}
-            >
-              <MaterialIcons name="person" size={60} color={themeColors.icon} />
-            </View>
-            <ThemedText type="title" style={styles.userName}>
-              {profile?.name || "Usuário"}
+            <MaterialIcons
+              name="auto-awesome"
+              size={40}
+              color={themeColors.accent}
+            />
+            <ThemedText type="title" style={{ marginTop: 10 }}>
+              Mapa Astral
             </ThemedText>
-            <ThemedText style={styles.userEmail}>{profile?.email}</ThemedText>
+            <ThemedText style={{ opacity: 0.7 }}>
+              Sua impressão digital cósmica
+            </ThemedText>
           </View>
 
-          {/* Card de Informações (sem fuso horário) */}
-          {profile && (
-            <ThemedView
-              lightColor={Colors.light.card}
-              darkColor={Colors.dark.card}
-              style={styles.infoCard}
-            >
-              <View style={styles.cardHeader}>
-                <ThemedText type="subtitle">Informações</ThemedText>
-                {!isEditingInfo && (
-                  <TouchableOpacity onPress={() => setIsEditingInfo(true)}>
-                    <MaterialIcons
-                      name="edit"
-                      size={24}
-                      color={themeColors.accent}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {isEditingInfo ? (
-                <>
-                  {/* Linha Curso - Editável */}
-                  <View style={styles.infoRow}>
-                    <MaterialIcons
-                      name="school"
-                      size={20}
-                      color={themeColors.icon}
-                      style={styles.infoIcon}
-                    />
-                    <ThemedText style={styles.label}>Curso:</ThemedText>
-                    <TouchableOpacity
-                      style={[
-                        styles.selectorButton,
-                        {
-                          borderColor: themeColors.icon,
-                          opacity: coursesLoading ? 0.6 : 1,
-                        },
-                      ]}
-                      onPress={() => setCourseModalVisible(true)}
-                      disabled={coursesLoading}
-                    >
-                      {coursesLoading ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={themeColors.accent}
-                          style={styles.selectorActivity}
-                        />
-                      ) : (
-                        <Text
-                          style={[
-                            styles.selectorText,
-                            {
-                              color: editableGoal?.length
-                                ? themeColors.text
-                                : themeColors.icon,
-                            },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {editableGoal?.length
-                            ? editableGoal
-                            : "Selecionar curso"}
-                        </Text>
-                      )}
-                      <MaterialIcons
-                        name="arrow-drop-down"
-                        size={24}
-                        color={themeColors.icon}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  {/* Linha Idade - Editável */}
-                  <View style={styles.infoRow}>
-                    <MaterialIcons
-                      name="cake"
-                      size={20}
-                      color={themeColors.icon}
-                      style={styles.infoIcon}
-                    />
-                    <ThemedText style={styles.label}>Idade:</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: themeColors.text }]}
-                      value={editableAge}
-                      onChangeText={setEditableAge}
-                      placeholder="Não informado"
-                      placeholderTextColor={themeColors.icon}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  {/* Linha Instituição - Editável */}
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                    <MaterialIcons
-                      name="location-city"
-                      size={20}
-                      color={themeColors.icon}
-                      style={styles.infoIcon}
-                    />
-                    <ThemedText style={styles.label}>Instituição:</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: themeColors.text }]}
-                      value={editableSchool}
-                      onChangeText={setEditableSchool}
-                      placeholder="Não informada"
-                      placeholderTextColor={themeColors.icon}
-                    />
-                  </View>
-                  {/* Linha de fuso horário REMOVIDA */}
-
-                  {/* Botões Salvar/Cancelar */}
-                  <View style={styles.editButtonsContainer}>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => setIsEditingInfo(false)}
-                      disabled={saving}
-                    >
-                      <Text style={styles.cancelButtonText}>Cancelar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.saveButton,
-                        { backgroundColor: themeColors.accent },
-                        saving && styles.disabledButton,
-                      ]}
-                      onPress={handleSaveInfo}
-                      disabled={saving}
-                    >
-                      {saving ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <Text style={styles.buttonText}>Salvar</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <>
-                  {/* Linha Curso - Visualização */}
-                  <View style={styles.infoRow}>
-                    <MaterialIcons
-                      name="school"
-                      size={20}
-                      color={themeColors.icon}
-                      style={styles.infoIcon}
-                    />
-                    <ThemedText style={styles.label}>Curso:</ThemedText>
-                    <ThemedText style={styles.info} numberOfLines={1}>
-                      {profile.goal || "Não informado"}
-                    </ThemedText>
-                  </View>
-                  {/* Linha Idade - Visualização */}
-                  <View style={styles.infoRow}>
-                    <MaterialIcons
-                      name="cake"
-                      size={20}
-                      color={themeColors.icon}
-                      style={styles.infoIcon}
-                    />
-                    <ThemedText style={styles.label}>Idade:</ThemedText>
-                    <ThemedText style={styles.info}>
-                      {profile.age || "Não informado"}
-                    </ThemedText>
-                  </View>
-                  {/* Linha Instituição - Visualização */}
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                    <MaterialIcons
-                      name="location-city"
-                      size={20}
-                      color={themeColors.icon}
-                      style={styles.infoIcon}
-                    />
-                    <ThemedText style={styles.label}>Instituição:</ThemedText>
-                    <ThemedText style={styles.info}>
-                      {profile.school || "Não informada"}
-                    </ThemedText>
-                  </View>
-                  {/* Linha de fuso horário REMOVIDA */}
-                </>
-              )}
-            </ThemedView>
-          )}
-
-          {/* Botão de Configurar Fuso Horário REMOVIDO */}
-
-          {/* Botão de Logout */}
-          <TouchableOpacity
-            style={[
-              styles.logoutButton,
-              { backgroundColor: themeColors.destructive },
-            ]}
-            onPress={handleLogout}
-          >
-            <MaterialIcons
-              name="logout"
-              size={20}
-              color="#fff"
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.buttonText}>Sair</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-
-      {/* Modal de Seleção de Curso */}
-      <Modal
-        visible={courseModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCourseModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
+          {/* Dados Básicos */}
           <View
             style={[
-              styles.modalContainer,
-              { backgroundColor: themeColors.card },
+              styles.dataCard,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.icon + "20",
+              },
             ]}
           >
-            {/* Cabeçalho do Modal */}
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: themeColors.text }]}>
-                Escolha o curso
-              </Text>
-              <TouchableOpacity
-                onPress={() => setCourseModalVisible(false)}
-                style={styles.modalCloseButton}
-              >
-                <MaterialIcons
-                  name="close"
-                  size={22}
-                  color={themeColors.icon}
-                />
-              </TouchableOpacity>
+            <View style={styles.dataRow}>
+              <MaterialIcons name="cake" size={16} color={themeColors.icon} />
+              <ThemedText style={styles.dataText}>
+                {profile?.birthDate || "Data não definida"}
+              </ThemedText>
             </View>
-            {/* Conteúdo do Modal */}
-            {coursesLoading ? (
-              <View style={styles.modalLoaderContainer}>
-                <ActivityIndicator size="large" color={themeColors.accent} />
-              </View>
+            <View style={styles.dataRow}>
+              <MaterialIcons
+                name="schedule"
+                size={16}
+                color={themeColors.icon}
+              />
+              <ThemedText style={styles.dataText}>
+                {profile?.birthTime || "Hora não definida"}
+              </ThemedText>
+            </View>
+            <View style={styles.dataRow}>
+              <MaterialIcons name="place" size={16} color={themeColors.icon} />
+              <ThemedText style={styles.dataText}>
+                {profile?.birthPlace || "Local não definido"}
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* Botão de Gerar (se lista vazia) ou Atualizar */}
+          <TouchableOpacity
+            style={[
+              styles.generateButton,
+              { backgroundColor: themeColors.accent },
+            ]}
+            onPress={generateMap}
+            disabled={mapLoading}
+          >
+            {mapLoading ? (
+              <ActivityIndicator color="#fff" />
             ) : (
-              <FlatList // Usando FlatList
-                data={courses}
-                keyExtractor={(item) => item}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
+              <>
+                <MaterialIcons
+                  name={astralMap.length > 0 ? "refresh" : "star"}
+                  size={20}
+                  color="#fff"
+                />
+                <Text style={styles.generateButtonText}>
+                  {astralMap.length > 0
+                    ? "Recalcular Mapa"
+                    : "Revelar meu Mapa"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* LISTA DO MAPA */}
+          <View style={styles.mapContainer}>
+            {astralMap.map((item, index) => (
+              <ThemedView
+                key={index}
+                style={[
+                  styles.planetCard,
+                  { backgroundColor: themeColors.card },
+                ]}
+              >
+                <View style={styles.planetHeader}>
+                  <ThemedText type="subtitle" style={{ fontSize: 18 }}>
+                    {item.planet}
+                  </ThemedText>
+                  <View
                     style={[
-                      styles.modalOption,
-                      {
-                        borderColor: themeColors.icon + "50", // Borda mais suave
-                        backgroundColor:
-                          editableGoal === item
-                            ? themeColors.accent
-                            : "transparent",
-                      },
+                      styles.signBadge,
+                      { borderColor: getElementColor(item.element) },
                     ]}
-                    onPress={() => handleSelectCourse(item)}
                   >
                     <Text
-                      style={[
-                        styles.modalOptionText,
-                        {
-                          color:
-                            editableGoal === item
-                              ? "#FFFFFF"
-                              : themeColors.text,
-                        },
-                      ]}
+                      style={{
+                        color: getElementColor(item.element),
+                        fontWeight: "bold",
+                      }}
                     >
-                      {item}
+                      {item.sign}
                     </Text>
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text
-                    style={[styles.modalEmptyText, { color: themeColors.icon }]}
-                  >
-                    Nenhum curso disponível.
-                  </Text>
-                }
-                style={styles.modalContent}
-                contentContainerStyle={styles.modalContentContainer}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
+                  </View>
+                </View>
 
-      {/* Modal de Seleção de Fuso Horário REMOVIDO */}
+                <View style={styles.planetMeta}>
+                  <ThemedText style={{ fontSize: 12, opacity: 0.6 }}>
+                    {item.house}
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 12, opacity: 0.6 }}>
+                    {" "}
+                    •{" "}
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 12, opacity: 0.6 }}>
+                    {item.element}
+                  </ThemedText>
+                </View>
+
+                <ThemedText style={styles.summary}>{item.summary}</ThemedText>
+              </ThemedView>
+            ))}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }
 
-// --- Estilos ---
-// Remover estilos: configButton, configButtonContent, configButtonLabel, configButtonValue
-// Remover searchInput se não for mais usado por outros modais
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  header: { alignItems: "center", marginBottom: 30 },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "rgba(128,128,128,0.1)",
-  },
-  userName: { fontSize: 28, fontWeight: "bold" },
-  userEmail: { fontSize: 16, color: "gray", marginTop: 4 },
-  infoCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 30, // Aumentado de volta
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  cardHeader: {
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  scrollContent: { padding: 20 },
+
+  header: { alignItems: "center", marginBottom: 20 },
+
+  dataCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128,128,128,0.1)",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128,128,128,0.08)",
-  },
-  infoIcon: {
-    marginRight: 12,
-    width: 20,
-    textAlign: "center",
-  },
-  label: {
-    fontSize: 16,
-    opacity: 0.7,
-    width: 90,
-  },
-  info: {
-    fontSize: 16,
-    fontWeight: "500",
-    flex: 1,
-    textAlign: "right",
-  },
-  input: {
-    fontSize: 16,
-    fontWeight: "500",
-    flex: 1,
-    textAlign: "right",
-    paddingVertical: 8,
-    paddingHorizontal: 0,
-  },
-  selectorButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingVertical: 8,
-    minHeight: 36,
-  },
-  selectorText: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginRight: 4,
-    textAlign: "right",
-    flexShrink: 1,
-  },
-  selectorActivity: {
-    marginRight: 8,
-  },
-  editButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 20,
-    paddingTop: 10,
-  },
-  saveButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: "center",
-    minWidth: 80,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  cancelButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: "center",
-    marginRight: 10,
-  },
-  cancelButtonText: {
-    color: Colors.light.destructive,
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  logoutButton: {
+    justifyContent: "space-around",
     padding: 15,
     borderRadius: 12,
-    alignItems: "center",
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  dataRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  dataText: { fontSize: 12 },
+
+  generateButton: {
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 30,
+    gap: 8,
   },
-  buttonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
-  // Estilos de Modal (mantidos para o modal de curso)
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalContainer: {
+  generateButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
+  mapContainer: { gap: 15 },
+  planetCard: {
+    padding: 16,
     borderRadius: 16,
-    maxHeight: "80%",
-    paddingVertical: 16,
-    paddingHorizontal: 0,
-    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  modalHeader: {
+  planetHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128,128,128,0.1)",
-    paddingHorizontal: 16,
+    marginBottom: 5,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalContent: {},
-  modalContentContainer: {
-    paddingBottom: 16,
-    paddingHorizontal: 12,
-  },
-  modalOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+  signBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 8,
   },
-  modalOptionText: {
-    fontSize: 16,
-    fontWeight: "500",
+  planetMeta: {
+    flexDirection: "row",
+    marginBottom: 10,
   },
-  modalLoaderContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 180,
-  },
-  modalEmptyText: {
-    fontSize: 16,
-    textAlign: "center",
-    paddingVertical: 20,
+  summary: {
+    fontSize: 14,
+    lineHeight: 20,
+    opacity: 0.9,
   },
 });
