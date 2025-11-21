@@ -5,6 +5,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { logSendMessage } from "@/lib/analytics";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router"; // Import atualizado
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,7 +13,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ScrollView, // <--- Adicionado ScrollView aqui
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -42,7 +43,6 @@ const SYSTEM_INSTRUCTION =
   "Ao sugerir conselhos, baseie-se em trânsitos planetários gerais, propriedades de pedras ou arquétipos do tarot. " +
   "Responda sempre em português.";
 
-// Perguntas rápidas para o estado vazio
 const STARTER_QUESTIONS = [
   "🔮 Qual a energia de hoje?",
   "❤️ Previsão para o amor",
@@ -59,12 +59,23 @@ export default function ChatScreen() {
     getChatModel,
   } = useChat();
 
+  const params = useLocalSearchParams<{ initialPrompt?: string }>(); // Recebe params
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+
+  // --- EFEITO PARA TRATAR O PARAMETRO DO TAROT ---
+  useEffect(() => {
+    if (params.initialPrompt) {
+      setInput(params.initialPrompt);
+      // Opcional: Poderia enviar automaticamente, mas deixar o usuário confirmar é melhor UX
+    }
+  }, [params.initialPrompt]);
+  // -----------------------------------------------
 
   const messages = useMemo(
     () => selectedConversation?.messages ?? [],
@@ -414,7 +425,6 @@ Follow-up suggestions (JSON array only):`,
               placeholderTextColor={themeColors.icon + "80"}
               editable={!loading}
               multiline
-              // maxHeight removido daqui, já está no styles.input
             />
             <TouchableOpacity
               onPress={() => handleSendMessage()}
@@ -464,8 +474,6 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   messagesListEmpty: { justifyContent: "center", alignItems: "center" },
-
-  // Empty State Styles
   listEmpty: { alignItems: "center", padding: 30, marginTop: 20 },
   iconCircle: {
     width: 120,
@@ -496,8 +504,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 5,
   },
-
-  // Message Bubbles
   messageContainer: {
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -507,8 +513,6 @@ const styles = StyleSheet.create({
   },
   userMessageContainer: { alignSelf: "flex-end", borderBottomRightRadius: 4 },
   modelMessageContainer: { alignSelf: "flex-start", borderBottomLeftRadius: 4 },
-
-  // Suggestions Area
   suggestionsWrapper: { paddingVertical: 10, paddingLeft: 16 },
   suggestionLabel: {
     fontSize: 12,
@@ -526,8 +530,6 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   suggestionText: { fontSize: 13, marginLeft: 6 },
-
-  // Input Area
   inputAreaContainer: {
     paddingHorizontal: 16,
     paddingVertical: 10,
