@@ -5,7 +5,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router"; // useNavigation do expo-router
+import { useNavigation } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
   collection,
@@ -13,11 +13,14 @@ import {
   getDoc,
   onSnapshot,
   query,
+  updateDoc,
   where,
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Modal,
   ScrollView,
   StyleSheet,
@@ -59,6 +62,66 @@ const MAJOR_ARCANA = [
   "O Mundo",
 ];
 
+// --- COMPONENTE: CARTA DE TAROT ANIMADA ---
+const TarotCardOption = ({
+  index,
+  onPress,
+  disabled,
+}: {
+  index: number;
+  onPress: () => void;
+  disabled: boolean;
+}) => {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2000 + index * 200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2000 + index * 200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const translateY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -10],
+  });
+
+  const rotate = index === 0 ? "-5deg" : index === 2 ? "5deg" : "0deg";
+  const marginTop = index === 1 ? 0 : 20;
+
+  return (
+    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.9}>
+      <Animated.View
+        style={[
+          styles.tarotCardOption,
+          {
+            transform: [{ translateY }, { rotate }],
+            marginTop: marginTop,
+          },
+        ]}
+      >
+        <MaterialIcons
+          name="auto-awesome"
+          size={32}
+          color="rgba(255,255,255,0.3)"
+        />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [userSign, setUserSign] = useState<string>("");
@@ -72,9 +135,9 @@ export default function HomeScreen() {
     name: string;
     meaning: string;
   } | null>(null);
-  const [tarotLoading, setTarotLoading] = useState(false);
 
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [deckModalVisible, setDeckModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState<{
     title: string;
     content: string;
@@ -87,13 +150,18 @@ export default function HomeScreen() {
     type: "horoscope",
   });
 
+  const [isChoosing, setIsChoosing] = useState(false);
+  const [cardRevealAnim] = useState(new Animated.Value(0));
+
   const { getChatModel } = useChat();
-
-  // CORREÇÃO AQUI: Tipando como <any> para permitir navegação flexível
   const navigation = useNavigation<any>();
-
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+
+  const getTodayKey = () => {
+    const d = new Date();
+    return d.toISOString().split("T")[0];
+  };
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
@@ -102,7 +170,21 @@ export default function HomeScreen() {
         const docRef = doc(db, "users", currentUser.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setUserSign(docSnap.data().zodiacSign || "Geral");
+          const data = docSnap.data();
+          setUserSign(data.zodiacSign || "Geral");
+
+          const today = getTodayKey();
+
+          if (data.dailyHoroscope && data.dailyHoroscope.date === today) {
+            setHoroscope(data.dailyHoroscope.content);
+          }
+
+          if (data.dailyTarot && data.dailyTarot.date === today) {
+            setTarotCard({
+              name: data.dailyTarot.card,
+              meaning: data.dailyTarot.meaning,
+            });
+          }
         }
       } else {
         setLoading(false);
@@ -113,28 +195,55 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const generateHoroscope = async () => {
-      if (!userSign || horoscope) return;
+      if (!user || !userSign || horoscope || horoscopeLoading) return;
+
       setHoroscopeLoading(true);
       try {
         const model = getChatModel();
         const prompt = `Gere um horóscopo do dia curto e inspirador para o signo de ${userSign}. Foco: autoconhecimento. Máximo de 3 frases.`;
         const result = await model.generateContent(prompt);
-        setHoroscope(result.response.text());
-      } catch (error) {
-        setHoroscope("As estrelas estão se realinhando. Tente mais tarde.");
+        const text = result.response.text();
+
+        setHoroscope(text);
+
+        await updateDoc(doc(db, "users", user.uid), {
+          dailyHoroscope: {
+            date: getTodayKey(),
+            content: text,
+          },
+        });
+      } catch (error: any) {
+        if (error.message?.includes("429")) {
+          setHoroscope(
+            "O oráculo está descansando. Tente novamente mais tarde."
+          );
+        } else {
+          setHoroscope("As estrelas estão se realinhando.");
+        }
       } finally {
         setHoroscopeLoading(false);
       }
     };
 
-    if (userSign) {
+    if (user && userSign) {
       generateHoroscope();
     }
-  }, [userSign]);
+  }, [user, userSign]);
 
-  const handleRevealTarot = async () => {
-    if (tarotCard) return;
-    setTarotLoading(true);
+  const openTarotDeck = () => {
+    if (tarotCard) {
+      openDetailsModal("tarot");
+    } else {
+      setDeckModalVisible(true);
+      cardRevealAnim.setValue(0);
+      setIsChoosing(false);
+    }
+  };
+
+  const handleChooseCard = async () => {
+    if (isChoosing || !user) return;
+    setIsChoosing(true);
+
     try {
       const randomCard =
         MAJOR_ARCANA[Math.floor(Math.random() * MAJOR_ARCANA.length)];
@@ -144,15 +253,39 @@ export default function HomeScreen() {
       Seja enigmático mas útil.`;
 
       const result = await model.generateContent(prompt);
+      const meaning = result.response.text().trim();
+
       setTarotCard({
         name: randomCard,
-        meaning: result.response.text().trim(),
+        meaning: meaning,
       });
-    } catch (error) {
+
+      await updateDoc(doc(db, "users", user.uid), {
+        dailyTarot: {
+          date: getTodayKey(),
+          card: randomCard,
+          meaning: meaning,
+        },
+      });
+
+      Animated.spring(cardRevealAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 10,
+        useNativeDriver: true,
+      }).start();
+    } catch (error: any) {
       console.error("Erro no Tarot:", error);
-    } finally {
-      setTarotLoading(false);
+      setIsChoosing(false);
+      if (error.message?.includes("429")) {
+        alert("O oráculo está sobrecarregado. Tente novamente em 1 minuto.");
+        setDeckModalVisible(false);
+      }
     }
+  };
+
+  const closeDeckModal = () => {
+    setDeckModalVisible(false);
   };
 
   const openDetailsModal = (type: "horoscope" | "tarot") => {
@@ -176,18 +309,13 @@ export default function HomeScreen() {
     setDetailsModalVisible(true);
   };
 
-  // --- CORREÇÃO: Chamada limpa do navigate ---
   const handleDiscussWithOracle = () => {
     setDetailsModalVisible(false);
-
     const initialPrompt = `Tirei a carta "${modalContent.title}" no Tarot de hoje, que diz: "${modalContent.content}". O que isso significa para o meu momento atual?`;
-
     setTimeout(() => {
-      // Agora o TypeScript aceita por causa do <any>
       navigation.navigate("chat", { initialPrompt });
     }, 200);
   };
-  // -------------------------------------------
 
   useEffect(() => {
     if (user) {
@@ -201,7 +329,6 @@ export default function HomeScreen() {
         collection(db, "users", user.uid, "events"),
         where("date", "==", todayString)
       );
-
       const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
         const events: Event[] = [];
         snapshot.forEach((doc) =>
@@ -211,12 +338,24 @@ export default function HomeScreen() {
         setTodaysEvents(events);
         setLoading(false);
       });
-
       return () => unsubscribeEvents();
     }
   }, [user]);
 
   const userName = user?.displayName?.split(" ")[0] || "Viajante";
+
+  const backInterpolate = cardRevealAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"],
+  });
+
+  const frontInterpolate = cardRevealAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["180deg", "360deg"],
+  });
+
+  const backAnimatedStyle = { transform: [{ rotateY: backInterpolate }] };
+  const frontAnimatedStyle = { transform: [{ rotateY: frontInterpolate }] };
 
   return (
     <ThemedView style={styles.container}>
@@ -279,12 +418,12 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Tarot */}
+            {/* Tarot do Dia */}
             <TouchableOpacity
               style={[
                 styles.gridCard,
                 styles.tarotCardTouchable,
-                tarotLoading || tarotCard
+                tarotCard
                   ? {
                       backgroundColor: themeColors.card,
                       borderColor: themeColors.accent,
@@ -296,19 +435,10 @@ export default function HomeScreen() {
                       borderWidth: 1,
                     },
               ]}
-              onPress={() => {
-                if (tarotCard) {
-                  openDetailsModal("tarot");
-                } else {
-                  handleRevealTarot();
-                }
-              }}
-              disabled={tarotLoading}
+              onPress={openTarotDeck}
               activeOpacity={0.9}
             >
-              {tarotLoading ? (
-                <ActivityIndicator color={themeColors.accent} />
-              ) : tarotCard ? (
+              {tarotCard ? (
                 <View style={styles.cardContent}>
                   <MaterialIcons
                     name="style"
@@ -341,7 +471,7 @@ export default function HomeScreen() {
                     Carta do Dia
                   </ThemedText>
                   <ThemedText style={styles.cardBackSubtitle}>
-                    Toque para revelar
+                    Toque para escolher
                   </ThemedText>
                 </View>
               )}
@@ -420,7 +550,6 @@ export default function HomeScreen() {
             )}
           </ThemedView>
 
-          {/* Ações Rápidas */}
           <ThemedView
             lightColor={Colors.light.card}
             darkColor={Colors.dark.card}
@@ -478,6 +607,135 @@ export default function HomeScreen() {
           </ThemedView>
         </ScrollView>
       </SafeAreaView>
+
+      {/* --- MODAL MESA DE TAROT --- */}
+      <Modal
+        visible={deckModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDeckModal}
+      >
+        <View style={styles.deckModalOverlay}>
+          <View style={styles.deckBackground} />
+
+          <View style={styles.deckContent}>
+            <ThemedText
+              type="title"
+              style={{ color: "#FFF", marginBottom: 10, textAlign: "center" }}
+            >
+              {tarotCard ? "Sua Revelação" : "Conecte-se..."}
+            </ThemedText>
+            <Text
+              style={{
+                color: "#FFF",
+                opacity: 0.7,
+                marginBottom: 40,
+                textAlign: "center",
+              }}
+            >
+              {tarotCard
+                ? "O universo falou."
+                : "Escolha uma carta com sua intuição"}
+            </Text>
+
+            <View style={styles.cardsRow}>
+              {!tarotCard ? (
+                <>
+                  <TarotCardOption
+                    index={0}
+                    onPress={handleChooseCard}
+                    disabled={isChoosing}
+                  />
+                  <TarotCardOption
+                    index={1}
+                    onPress={handleChooseCard}
+                    disabled={isChoosing}
+                  />
+                  <TarotCardOption
+                    index={2}
+                    onPress={handleChooseCard}
+                    disabled={isChoosing}
+                  />
+                </>
+              ) : (
+                <View style={styles.flipContainer}>
+                  <Animated.View
+                    style={[
+                      styles.flipCard,
+                      styles.flipCardBack,
+                      backAnimatedStyle,
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="auto-awesome"
+                      size={40}
+                      color="rgba(255,255,255,0.5)"
+                    />
+                  </Animated.View>
+
+                  <Animated.View
+                    style={[
+                      styles.flipCard,
+                      styles.flipCardFront,
+                      frontAnimatedStyle,
+                      { backgroundColor: themeColors.card },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="style"
+                      size={40}
+                      color={themeColors.accent}
+                      style={{ marginBottom: 15 }}
+                    />
+                    <ThemedText
+                      type="subtitle"
+                      style={{
+                        color: themeColors.accent,
+                        marginBottom: 10,
+                        textAlign: "center",
+                      }}
+                    >
+                      {tarotCard.name}
+                    </ThemedText>
+                    <ThemedText
+                      style={{ textAlign: "center", paddingHorizontal: 10 }}
+                      numberOfLines={5}
+                    >
+                      {tarotCard.meaning}
+                    </ThemedText>
+                  </Animated.View>
+                </View>
+              )}
+            </View>
+
+            {isChoosing && !tarotCard && (
+              <ActivityIndicator
+                size="large"
+                color="#FFF"
+                style={{ marginTop: 40 }}
+              />
+            )}
+
+            {tarotCard && (
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: themeColors.accent,
+                    marginTop: 50,
+                    width: "80%",
+                  },
+                ]}
+                onPress={closeDeckModal}
+              >
+                <Text style={[styles.modalButtonText, { color: "#FFF" }]}>
+                  Aceitar Mensagem
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal de Detalhes */}
       <Modal
@@ -545,7 +803,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[
                   styles.modalButton,
-                  { backgroundColor: themeColors.accent },
+                  { backgroundColor: themeColors.accent, flex: 1 },
                 ]}
                 onPress={() => setDetailsModalVisible(false)}
               >
@@ -699,8 +957,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: "center",
-    flex: 1,
-  },
+  }, // REMOVIDO flex: 1
   modalButtonSecondary: {
     paddingVertical: 12,
     paddingHorizontal: 15,
@@ -712,4 +969,68 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalButtonText: { fontWeight: "bold", fontSize: 15 },
+
+  // Styles do Deck Modal (Mesa de Tarot)
+  deckModalOverlay: { flex: 1, justifyContent: "center", alignItems: "center" },
+  deckBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#1a0b2e",
+  },
+  deckContent: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  cardsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    height: 320,
+    width: "100%",
+  },
+  tarotCardOption: {
+    width: 100,
+    height: 160,
+    borderRadius: 12,
+    backgroundColor: "#5e35b1",
+    borderWidth: 2,
+    borderColor: "#b39ddb",
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: -15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6.27,
+    elevation: 10,
+  },
+  flipContainer: {
+    width: 240,
+    height: 360,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  flipCard: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
+    position: "absolute",
+    backfaceVisibility: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  flipCardFront: {},
+  flipCardBack: {
+    backgroundColor: "#5e35b1",
+    borderColor: "#b39ddb",
+    borderWidth: 1,
+  },
 });

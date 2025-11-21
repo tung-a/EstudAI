@@ -5,8 +5,19 @@ import { useChat } from "@/contexts/ChatContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { logSendMessage } from "@/lib/analytics";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router"; // Import atualizado
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// Adicionados hooks nativos para garantir o recebimento dos parâmetros
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -59,7 +70,9 @@ export default function ChatScreen() {
     getChatModel,
   } = useChat();
 
-  const params = useLocalSearchParams<{ initialPrompt?: string }>(); // Recebe params
+  // Hooks de navegação nativa
+  const route = useRoute();
+  const navigation = useNavigation();
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,13 +81,20 @@ export default function ChatScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 
-  // --- EFEITO PARA TRATAR O PARAMETRO DO TAROT ---
-  useEffect(() => {
-    if (params.initialPrompt) {
-      setInput(params.initialPrompt);
-      // Opcional: Poderia enviar automaticamente, mas deixar o usuário confirmar é melhor UX
-    }
-  }, [params.initialPrompt]);
+  // --- CORREÇÃO: Captura de parâmetros robusta ---
+  // Usa useFocusEffect para garantir que rode sempre que a tela ganhar foco
+  useFocusEffect(
+    useCallback(() => {
+      const params = route.params as { initialPrompt?: string } | undefined;
+
+      if (params?.initialPrompt) {
+        setInput(params.initialPrompt);
+
+        // Limpa os parâmetros para não preencher de novo se o usuário sair e voltar sem intenção
+        navigation.setParams({ initialPrompt: undefined } as any);
+      }
+    }, [route.params, navigation])
+  );
   // -----------------------------------------------
 
   const messages = useMemo(
@@ -83,8 +103,13 @@ export default function ChatScreen() {
   );
   const canSendMessage = input.trim().length > 0 && !loading;
 
+  // Limpa o input quando troca de conversa (mas não quando vem de outra aba com prompt)
   useEffect(() => {
-    setInput("");
+    // Só limpa se NÃO tiver acabado de receber um prompt via rota
+    const params = route.params as { initialPrompt?: string } | undefined;
+    if (!params?.initialPrompt) {
+      setInput("");
+    }
     setSuggestedQuestions([]);
   }, [selectedConversation?.id]);
 
@@ -425,6 +450,7 @@ Follow-up suggestions (JSON array only):`,
               placeholderTextColor={themeColors.icon + "80"}
               editable={!loading}
               multiline
+              // maxHeight removido daqui, tratado no style
             />
             <TouchableOpacity
               onPress={() => handleSendMessage()}
@@ -474,6 +500,8 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   messagesListEmpty: { justifyContent: "center", alignItems: "center" },
+
+  // Empty State Styles
   listEmpty: { alignItems: "center", padding: 30, marginTop: 20 },
   iconCircle: {
     width: 120,
@@ -504,6 +532,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 5,
   },
+
+  // Message Bubbles
   messageContainer: {
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -513,6 +543,8 @@ const styles = StyleSheet.create({
   },
   userMessageContainer: { alignSelf: "flex-end", borderBottomRightRadius: 4 },
   modelMessageContainer: { alignSelf: "flex-start", borderBottomLeftRadius: 4 },
+
+  // Suggestions Area
   suggestionsWrapper: { paddingVertical: 10, paddingLeft: 16 },
   suggestionLabel: {
     fontSize: 12,
@@ -530,6 +562,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   suggestionText: { fontSize: 13, marginLeft: 6 },
+
+  // Input Area
   inputAreaContainer: {
     paddingHorizontal: 16,
     paddingVertical: 10,
