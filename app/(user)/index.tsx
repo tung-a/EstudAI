@@ -5,6 +5,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from 'expo-haptics';
 import { useNavigation } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
@@ -16,16 +17,19 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Easing,
+  Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -64,63 +68,46 @@ const MAJOR_ARCANA = [
 
 // --- COMPONENTE: CARTA DE TAROT ANIMADA ---
 const TarotCardOption = ({
-  index,
   onPress,
   disabled,
+  animatedStyle,
+  isInactive,
+  stackOrder,
+  accessibilityLabel,
 }: {
-  index: number;
   onPress: () => void;
   disabled: boolean;
-}) => {
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  animatedStyle: any;
+  isInactive: boolean;
+  stackOrder: number;
+  accessibilityLabel: string;
+}) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={disabled || isInactive}
+    activeOpacity={0.9}
+    style={{ opacity: isInactive ? 0.4 : 1, zIndex: stackOrder }}
+    accessibilityLabel={accessibilityLabel}
+  >
+    <Animated.View
+      style={[styles.tarotCardOption, animatedStyle, { zIndex: stackOrder }]}
+    >
+      <MaterialIcons
+        name="auto-awesome"
+        size={32}
+        color="rgba(255,255,255,0.3)"
+      />
+    </Animated.View>
+  </TouchableOpacity>
+);
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: 1,
-          duration: 2000 + index * 200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 2000 + index * 200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  const translateY = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -10],
-  });
-
-  const rotate = index === 0 ? "-5deg" : index === 2 ? "5deg" : "0deg";
-  const marginTop = index === 1 ? 0 : 20;
-
-  return (
-    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.9}>
-      <Animated.View
-        style={[
-          styles.tarotCardOption,
-          {
-            transform: [{ translateY }, { rotate }],
-            marginTop: marginTop,
-          },
-        ]}
-      >
-        <MaterialIcons
-          name="auto-awesome"
-          size={32}
-          color="rgba(255,255,255,0.3)"
-        />
-      </Animated.View>
-    </TouchableOpacity>
-  );
-};
+// Habilita animações de layout no Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
@@ -152,6 +139,102 @@ export default function HomeScreen() {
 
   const [isChoosing, setIsChoosing] = useState(false);
   const [cardRevealAnim] = useState(new Animated.Value(0));
+  const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(null);
+  const cardMotionValues = useRef<Animated.Value[]>(
+    Array.from({ length: 3 }, () => new Animated.Value(1))
+  ).current;
+  const cardShakeValues = useRef<Animated.Value[]>(
+    Array.from({ length: 3 }, () => new Animated.Value(0))
+  ).current;
+  const shakeLoops = useRef<Animated.CompositeAnimation[]>([]);
+
+  const stopShakeSequence = useCallback(() => {
+    shakeLoops.current.forEach((loop) => loop.stop());
+    shakeLoops.current = [];
+    cardShakeValues.forEach((value) => value.setValue(0));
+  }, [cardShakeValues]);
+
+  const startShakeSequence = useCallback(() => {
+    stopShakeSequence();
+    shakeLoops.current = cardShakeValues.map((value, index) => {
+      value.setValue(0);
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 140,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: -1,
+            duration: 140,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 140,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      setTimeout(() => loop.start(), index * 60);
+      return loop;
+    });
+  }, [cardShakeValues, stopShakeSequence]);
+
+  const playEntranceSequence = useCallback(() => {
+    cardMotionValues.forEach((value) => value.setValue(1));
+    Animated.stagger(
+      120,
+      cardMotionValues.map((value) =>
+        Animated.spring(value, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 7,
+        })
+      )
+    ).start(({ finished }) => {
+      if (finished) startShakeSequence();
+    });
+  }, [cardMotionValues, startShakeSequence]);
+
+  const animateCardSelection = (index: number) => {
+    Animated.parallel(
+      cardMotionValues.map((value, cardIndex) =>
+        cardIndex === index
+          ? Animated.spring(value, {
+              toValue: -0.3,
+              useNativeDriver: true,
+              friction: 6,
+            })
+          : Animated.timing(value, {
+              toValue: 2,
+              duration: 320,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            })
+      )
+    ).start();
+  };
+
+  const triggerSuccessHaptic = useCallback(async () => {
+    if (Platform.OS === "web") return;
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      /* haptics not supported here */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (deckModalVisible && !tarotCard) {
+      // Reseta e inicia a sequência: Entrada -> Balanço (Vibração Visual)
+      playEntranceSequence();
+    }
+  }, [deckModalVisible, tarotCard, playEntranceSequence]);
 
   const { getChatModel } = useChat();
   const navigation = useNavigation<any>();
@@ -237,12 +320,16 @@ export default function HomeScreen() {
       setDeckModalVisible(true);
       cardRevealAnim.setValue(0);
       setIsChoosing(false);
+      setSelectedCardIndex(null);
     }
   };
 
-  const handleChooseCard = async () => {
+  const handleChooseCard = async (cardIndex: number) => {
     if (isChoosing || !user) return;
     setIsChoosing(true);
+    setSelectedCardIndex(cardIndex);
+    stopShakeSequence();
+    animateCardSelection(cardIndex);
 
     try {
       const randomCard =
@@ -260,6 +347,8 @@ export default function HomeScreen() {
         meaning: meaning,
       });
 
+      await triggerSuccessHaptic();
+
       await updateDoc(doc(db, "users", user.uid), {
         dailyTarot: {
           date: getTodayKey(),
@@ -268,6 +357,9 @@ export default function HomeScreen() {
         },
       });
 
+      await triggerSuccessHaptic();
+
+      cardRevealAnim.setValue(0);
       Animated.spring(cardRevealAnim, {
         toValue: 1,
         friction: 8,
@@ -276,16 +368,21 @@ export default function HomeScreen() {
       }).start();
     } catch (error: any) {
       console.error("Erro no Tarot:", error);
-      setIsChoosing(false);
+      playEntranceSequence();
+      setSelectedCardIndex(null);
       if (error.message?.includes("429")) {
         alert("O oráculo está sobrecarregado. Tente novamente em 1 minuto.");
         setDeckModalVisible(false);
       }
+    } finally {
+      setIsChoosing(false);
     }
   };
 
   const closeDeckModal = () => {
     setDeckModalVisible(false);
+    setSelectedCardIndex(null);
+    stopShakeSequence();
   };
 
   const openDetailsModal = (type: "horoscope" | "tarot") => {
@@ -354,8 +451,13 @@ export default function HomeScreen() {
     outputRange: ["180deg", "360deg"],
   });
 
-  const backAnimatedStyle = { transform: [{ rotateY: backInterpolate }] };
-  const frontAnimatedStyle = { transform: [{ rotateY: frontInterpolate }] };
+  const backAnimatedStyle = {
+    transform: [{ perspective: 1000 }, { rotateY: backInterpolate }],
+  };
+
+  const frontAnimatedStyle = {
+    transform: [{ perspective: 1000 }, { rotateY: frontInterpolate }],
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -616,8 +718,10 @@ export default function HomeScreen() {
         onRequestClose={closeDeckModal}
       >
         <View style={styles.deckModalOverlay}>
-          <View style={styles.deckBackground} />
-
+          <Image
+            source={require("@/assets/images/mesa_tarot.png")}
+            style={styles.deckBackground}
+          />
           <View style={styles.deckContent}>
             <ThemedText
               type="title"
@@ -640,23 +744,54 @@ export default function HomeScreen() {
 
             <View style={styles.cardsRow}>
               {!tarotCard ? (
-                <>
-                  <TarotCardOption
-                    index={0}
-                    onPress={handleChooseCard}
-                    disabled={isChoosing}
-                  />
-                  <TarotCardOption
-                    index={1}
-                    onPress={handleChooseCard}
-                    disabled={isChoosing}
-                  />
-                  <TarotCardOption
-                    index={2}
-                    onPress={handleChooseCard}
-                    disabled={isChoosing}
-                  />
-                </>
+                [0, 1, 2].map((cardIndex) => {
+                  const rotate =
+                    cardIndex === 0 ? "-5deg" : cardIndex === 2 ? "5deg" : "0deg";
+                  const marginTop = cardIndex === 1 ? 0 : 20;
+
+                  return (
+                    <TarotCardOption
+                      key={`tarot-card-${cardIndex}`}
+                      onPress={() => handleChooseCard(cardIndex)}
+                      disabled={isChoosing}
+                      isInactive={
+                        selectedCardIndex !== null && selectedCardIndex !== cardIndex
+                      }
+                      stackOrder={
+                        selectedCardIndex === cardIndex ? 10 : cardIndex + 1
+                      }
+                      accessibilityLabel={`Carta ${cardIndex + 1}`}
+                      animatedStyle={{
+                        marginTop,
+                        transform: [
+                          {
+                            translateY: cardMotionValues[cardIndex].interpolate({
+                              inputRange: [-0.3, 0, 1, 2],
+                              outputRange: [-20, 0, 120, 400],
+                            }),
+                          },
+                          {
+                            scale: cardMotionValues[cardIndex].interpolate({
+                              inputRange: [-0.3, 0, 1, 2],
+                              outputRange: [1.05, 1, 0.95, 0.9],
+                            }),
+                          },
+                          {
+                            rotateZ: cardShakeValues[cardIndex].interpolate({
+                              inputRange: [-1, 0, 1],
+                              outputRange: ["-1.6deg", "0deg", "1.6deg"],
+                            }),
+                          },
+                          { rotate },
+                        ],
+                        opacity: cardMotionValues[cardIndex].interpolate({
+                          inputRange: [0, 1.5, 2],
+                          outputRange: [1, 1, 0],
+                        }),
+                      }}
+                    />
+                  );
+                })
               ) : (
                 <View style={styles.flipContainer}>
                   <Animated.View
@@ -973,8 +1108,11 @@ const styles = StyleSheet.create({
   // Styles do Deck Modal (Mesa de Tarot)
   deckModalOverlay: { flex: 1, justifyContent: "center", alignItems: "center" },
   deckBackground: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#1a0b2e",
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    top: 0,
+    left: 0,
   },
   deckContent: {
     width: "100%",

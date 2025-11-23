@@ -4,7 +4,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { formatDuration, formatHeaderTitle } from "@/lib/dateUtils";
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { forwardRef, useMemo, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
 import {
   SectionList,
   SectionListProps,
@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import Markdown, { MarkdownNode } from "react-native-markdown-display";
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 
 type AgendaListViewProps = {
   events: { [date: string]: Event[] };
@@ -118,111 +119,117 @@ export const AgendaListView = forwardRef<
           )}
         </View>
       )}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const hasRecommendation = Boolean(item.studyRecommendation);
         const isExpanded = expandedEventId === item.id;
 
         return (
-          <TouchableOpacity
-            onPress={() => {
-              if (hasRecommendation)
-                setExpandedEventId((c) => (c === item.id ? null : item.id));
-            }}
-            onLongPress={() => onDeleteEvent(item.id)}
-            style={[
-              styles.agendaEventItem,
-              { backgroundColor: themeColors.card },
-            ]}
-            activeOpacity={hasRecommendation ? 0.7 : 1}
+          <Animated.View
+            entering={FadeInDown.delay(index * 200).duration(1000)}
+            layout={Layout.delay(100).duration(500)}
           >
-            <View
+            <TouchableOpacity
+              onPress={() => {
+                if (hasRecommendation)
+                  setExpandedEventId((c) => (c === item.id ? null : item.id));
+              }}
+              onLongPress={() => onDeleteEvent(item.id)}
               style={[
-                styles.accentLine,
-                { backgroundColor: themeColors.accent },
+                styles.agendaEventItem,
+                { backgroundColor: themeColors.card },
               ]}
-            />
+              activeOpacity={hasRecommendation ? 0.7 : 1}
+            >
+              <View
+                style={[
+                  styles.accentLine,
+                  { backgroundColor: themeColors.accent },
+                ]}
+              />
 
-            <View style={styles.contentWrapper}>
-              <View style={styles.topRow}>
-                <ThemedText style={styles.agendaEventTitle} numberOfLines={1}>
-                  {item.title}
-                </ThemedText>
-                <View
-                  style={[
-                    styles.timeBadge,
-                    { backgroundColor: themeColors.background },
-                  ]}
-                >
-                  <ThemedText style={{ fontSize: 12, fontWeight: "600" }}>
-                    {item.time}
+              <View style={styles.contentWrapper}>
+                <View style={styles.topRow}>
+                  <ThemedText style={styles.agendaEventTitle} numberOfLines={1}>
+                    {item.title}
                   </ThemedText>
-                </View>
-              </View>
-
-              <View style={styles.subRow}>
-                <MaterialIcons
-                  name="hourglass-empty"
-                  size={12}
-                  color={themeColors.icon}
-                />
-                <ThemedText style={styles.agendaEventDuration}>
-                  {formatDuration(item.duration)}
-                </ThemedText>
-                {/* CORREÇÃO: Usando item.energy em vez de disciplinaNome */}
-                {item.energy && (
-                  <>
-                    <ThemedText style={styles.dotSeparator}>•</ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.agendaEventSubtitle,
-                        { color: themeColors.accent },
-                      ]}
-                    >
-                      {item.energy}
+                  <View
+                    style={[
+                      styles.timeBadge,
+                      { backgroundColor: themeColors.background },
+                    ]}
+                  >
+                    <ThemedText style={{ fontSize: 12, fontWeight: "600" }}>
+                      {item.time}
                     </ThemedText>
-                  </>
-                )}
-              </View>
-
-              {hasRecommendation && (
-                <View
-                  style={[
-                    styles.recommendationSection,
-                    { borderColor: themeColors.icon + "15" },
-                  ]}
-                >
-                  <View style={styles.recommendationHeader}>
-                    <MaterialIcons
-                      name="stars"
-                      size={14}
-                      color={themeColors.accent}
-                    />
-                    <ThemedText
-                      style={[
-                        styles.recommendationLabel,
-                        { color: themeColors.accent },
-                      ]}
-                    >
-                      Orientação Astral
-                    </ThemedText>
-                    <MaterialIcons
-                      name={isExpanded ? "expand-less" : "expand-more"}
-                      size={20}
-                      color={themeColors.icon}
-                      style={{ marginLeft: "auto" }}
-                    />
                   </View>
-                  {isExpanded && (
-                    <View style={styles.recommendationTextContainer}>
-                      <Markdown rules={markdownRules}>
-                        {item.studyRecommendation || ""}
-                      </Markdown>
-                    </View>
+                </View>
+
+                <View style={styles.subRow}>
+                  <MaterialIcons
+                    name="hourglass-empty"
+                    size={12}
+                    color={themeColors.icon}
+                  />
+                  <ThemedText style={styles.agendaEventDuration}>
+                    {formatDuration(item.duration)}
+                  </ThemedText>
+                  {/* CORREÇÃO: Usando item.energy em vez de disciplinaNome */}
+                  {item.energy && (
+                    <>
+                      <ThemedText style={styles.dotSeparator}>•</ThemedText>
+                      <ThemedText
+                        style={[
+                          styles.agendaEventSubtitle,
+                          { color: themeColors.accent },
+                        ]}
+                      >
+                        {item.energy}
+                      </ThemedText>
+                    </>
                   )}
                 </View>
-              )}
-            </View>
-          </TouchableOpacity>
+
+                {hasRecommendation && (
+                  <View
+                    style={[
+                      styles.recommendationSection,
+                      { borderColor: themeColors.icon + "15" },
+                    ]}
+                  >
+                    <View style={styles.recommendationHeader}>
+                      <MaterialIcons
+                        name="stars"
+                        size={14}
+                        color={themeColors.accent}
+                      />
+                      <ThemedText
+                        style={[
+                          styles.recommendationLabel,
+                          { color: themeColors.accent },
+                        ]}
+                      >
+                        Orientação Astral
+                      </ThemedText>
+                      <MaterialIcons
+                        name={isExpanded ? "expand-less" : "expand-more"}
+                        size={20}
+                        color={themeColors.icon}
+                        style={{ marginLeft: "auto" }}
+                      />
+                    </View>
+                    {isExpanded && (
+                      <View style={styles.recommendationTextContainer}>
+                        <Markdown rules={markdownRules}>
+                          {item.studyRecommendation || ""}
+                        </Markdown>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+          
         );
       }}
       ListEmptyComponent={

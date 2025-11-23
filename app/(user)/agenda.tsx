@@ -16,7 +16,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import React, {
+import {
   useCallback,
   useEffect,
   useMemo,

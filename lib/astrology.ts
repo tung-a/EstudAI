@@ -66,3 +66,18 @@ export const parseDateString = (
 
   return { day, month, year };
 };
+
+export const ZodiacImages: Record<string, any> = {
+  "Áries": require("@/assets/images/zodiac/Aries_pfp.png"),
+  "Touro": require("@/assets/images/zodiac/Taurus_pfp.png"),
+  "Gêmeos": require("@/assets/images/zodiac/Gemini_pfp.png"),
+  "Câncer": require("@/assets/images/zodiac/Cancer_pfp.png"),
+  "Leão": require("@/assets/images/zodiac/Leo_pfp.png"),
+  "Virgem": require("@/assets/images/zodiac/Virgo_pfp.png"),
+  "Libra": require("@/assets/images/zodiac/Libra_pfp.png"),
+  "Escorpião": require("@/assets/images/zodiac/Scorpio_pfp.png"),
+  "Sagitário": require("@/assets/images/zodiac/Sagittarius_pfp.png"),
+  "Capricórnio": require("@/assets/images/zodiac/Capricorn_pfp.png"),
+  "Aquário": require("@/assets/images/zodiac/Aquarius_pfp.png"),
+  "Peixes": require("@/assets/images/zodiac/Pisces_pfp.png"),
+};

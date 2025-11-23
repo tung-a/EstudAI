@@ -8,7 +8,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { DrawerActions, useNavigation } from "@react-navigation/native";
 import { Tabs } from "expo-router";
-import React from "react";
 import { View } from "react-native";
 import { TouchableOpacity } from "react-native-gesture-handler";
 
@@ -89,6 +88,16 @@ function TabLayout() {
           headerShown: false,
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="star" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: "Perfil", // Nome que aparece na aba
+          headerShown: false,
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="person" size={28} color={color} />
           ),
         }}
       />

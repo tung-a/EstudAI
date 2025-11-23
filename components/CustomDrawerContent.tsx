@@ -1,16 +1,18 @@
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useChat } from "@/contexts/ChatContext";
-import { auth } from "@/firebaseConfig"; // Importar auth
+import { auth, db } from "@/firebaseConfig"; // Importar auth
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ZodiacImages } from "@/lib/astrology";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
 } from "@react-navigation/drawer";
 import { signOut } from "firebase/auth"; // Importar signOut
-import React from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { doc, getDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export function CustomDrawerContent(props: DrawerContentComponentProps) {
@@ -24,6 +26,20 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const user = auth.currentUser;
+
+  const [userSign, setUserSign] = useState<string | null>(null);
+  useEffect(() => {
+    if (user) {
+      getDoc(doc(db, "users", user.uid)).then(snap => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.zodiacSign) {
+            setUserSign(data.zodiacSign);
+          }
+        }
+      });
+    }
+  }, [user]);
 
   const handleAddNewChat = () => {
     addConversation();
@@ -55,12 +71,19 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           { borderBottomColor: themeColors.icon + "30" },
         ]}
       >
-        <View style={[styles.avatar, { borderColor: themeColors.icon + "50" }]}>
-          <MaterialIcons
-            name="account-circle"
-            size={50}
-            color={themeColors.icon}
-          />
+        <View style={[styles.avatar, { borderColor: themeColors.icon + "50", overflow: 'hidden', borderWidth: 2, width: 54, height: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center' }]}>
+          {userSign && ZodiacImages[userSign] ? (
+            <Image
+              source={ZodiacImages[userSign]}
+              style={{ width: '100%', height: '100%' }}
+            />
+          ) : (
+            <MaterialIcons
+              name="account-circle"
+              size={50}
+              color={themeColors.icon}
+            />
+          )}
         </View>
         <View style={styles.userInfo}>
           <ThemedText type="defaultSemiBold" numberOfLines={1}>
