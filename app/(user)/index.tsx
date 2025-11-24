@@ -5,13 +5,12 @@ import { useChat } from "@/contexts/ChatContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
-import * as Haptics from 'expo-haptics';
+import * as Haptics from "expo-haptics";
 import { useNavigation } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
   collection,
   doc,
-  getDoc,
   onSnapshot,
   query,
   updateDoc,
@@ -139,7 +138,9 @@ export default function HomeScreen() {
 
   const [isChoosing, setIsChoosing] = useState(false);
   const [cardRevealAnim] = useState(new Animated.Value(0));
-  const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(null);
+  const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
+    null
+  );
   const cardMotionValues = useRef<Animated.Value[]>(
     Array.from({ length: 3 }, () => new Animated.Value(1))
   ).current;
@@ -246,36 +247,53 @@ export default function HomeScreen() {
     return d.toISOString().split("T")[0];
   };
 
+  // 1. Autenticação: Apenas define o usuário
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-        const docRef = doc(db, "users", currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setUserSign(data.zodiacSign || "Geral");
-
-          const today = getTodayKey();
-
-          if (data.dailyHoroscope && data.dailyHoroscope.date === today) {
-            setHoroscope(data.dailyHoroscope.content);
-          }
-
-          if (data.dailyTarot && data.dailyTarot.date === today) {
-            setTarotCard({
-              name: data.dailyTarot.card,
-              meaning: data.dailyTarot.meaning,
-            });
-          }
-        }
-      } else {
+      if (!currentUser) {
         setLoading(false);
       }
     });
     return () => unsubscribeAuth();
   }, []);
 
+  // 2. Dados do Usuário (Snapshot em tempo real para evitar condição de corrida)
+  useEffect(() => {
+    if (!user) return;
+
+    const userDocRef = doc(db, "users", user.uid);
+
+    // Ouve mudanças no documento do usuário.
+    // Isso garante que se o registro ainda estiver salvando o 'zodiacSign',
+    // a tela atualizará assim que o dado chegar.
+    const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+
+        if (data.zodiacSign) {
+          setUserSign(data.zodiacSign);
+        }
+
+        const today = getTodayKey();
+
+        if (data.dailyHoroscope && data.dailyHoroscope.date === today) {
+          setHoroscope(data.dailyHoroscope.content);
+        }
+
+        if (data.dailyTarot && data.dailyTarot.date === today) {
+          setTarotCard({
+            name: data.dailyTarot.card,
+            meaning: data.dailyTarot.meaning,
+          });
+        }
+      }
+    });
+
+    return () => unsubscribeSnapshot();
+  }, [user]);
+
+  // 3. Gera o horóscopo APENAS quando temos o usuário E o signo
   useEffect(() => {
     const generateHoroscope = async () => {
       if (!user || !userSign || horoscope || horoscopeLoading) return;
@@ -311,7 +329,7 @@ export default function HomeScreen() {
     if (user && userSign) {
       generateHoroscope();
     }
-  }, [user, userSign]);
+  }, [user, userSign]); // Remove 'horoscope' da dependência para evitar loop se a lógica mudar, mas mantém 'userSign'
 
   const openTarotDeck = () => {
     if (tarotCard) {
@@ -746,7 +764,11 @@ export default function HomeScreen() {
               {!tarotCard ? (
                 [0, 1, 2].map((cardIndex) => {
                   const rotate =
-                    cardIndex === 0 ? "-5deg" : cardIndex === 2 ? "5deg" : "0deg";
+                    cardIndex === 0
+                      ? "-5deg"
+                      : cardIndex === 2
+                      ? "5deg"
+                      : "0deg";
                   const marginTop = cardIndex === 1 ? 0 : 20;
 
                   return (
@@ -755,7 +777,8 @@ export default function HomeScreen() {
                       onPress={() => handleChooseCard(cardIndex)}
                       disabled={isChoosing}
                       isInactive={
-                        selectedCardIndex !== null && selectedCardIndex !== cardIndex
+                        selectedCardIndex !== null &&
+                        selectedCardIndex !== cardIndex
                       }
                       stackOrder={
                         selectedCardIndex === cardIndex ? 10 : cardIndex + 1
@@ -765,10 +788,12 @@ export default function HomeScreen() {
                         marginTop,
                         transform: [
                           {
-                            translateY: cardMotionValues[cardIndex].interpolate({
-                              inputRange: [-0.3, 0, 1, 2],
-                              outputRange: [-20, 0, 120, 400],
-                            }),
+                            translateY: cardMotionValues[cardIndex].interpolate(
+                              {
+                                inputRange: [-0.3, 0, 1, 2],
+                                outputRange: [-20, 0, 120, 400],
+                              }
+                            ),
                           },
                           {
                             scale: cardMotionValues[cardIndex].interpolate({
@@ -1108,9 +1133,9 @@ const styles = StyleSheet.create({
   // Styles do Deck Modal (Mesa de Tarot)
   deckModalOverlay: { flex: 1, justifyContent: "center", alignItems: "center" },
   deckBackground: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
+    position: "absolute",
+    width: "100%",
+    height: "100%",
     top: 0,
     left: 0,
   },

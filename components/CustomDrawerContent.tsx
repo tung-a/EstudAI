@@ -1,7 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useChat } from "@/contexts/ChatContext";
-import { auth, db } from "@/firebaseConfig"; // Importar auth
+import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ZodiacImages } from "@/lib/astrology";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -9,10 +9,17 @@ import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
 } from "@react-navigation/drawer";
-import { signOut } from "firebase/auth"; // Importar signOut
-import { doc, getDoc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore"; // <--- Alterado para onSnapshot
 import { useEffect, useState } from "react";
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export function CustomDrawerContent(props: DrawerContentComponentProps) {
@@ -28,9 +35,12 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const user = auth.currentUser;
 
   const [userSign, setUserSign] = useState<string | null>(null);
+
+  // --- CORREÇÃO: Uso de onSnapshot para atualização em tempo real ---
   useEffect(() => {
     if (user) {
-      getDoc(doc(db, "users", user.uid)).then(snap => {
+      const userDocRef = doc(db, "users", user.uid);
+      const unsubscribe = onSnapshot(userDocRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
           if (data.zodiacSign) {
@@ -38,8 +48,10 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           }
         }
       });
+      return () => unsubscribe();
     }
   }, [user]);
+  // ------------------------------------------------------------------
 
   const handleAddNewChat = () => {
     addConversation();
@@ -71,11 +83,25 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           { borderBottomColor: themeColors.icon + "30" },
         ]}
       >
-        <View style={[styles.avatar, { borderColor: themeColors.icon + "50", overflow: 'hidden', borderWidth: 2, width: 54, height: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center' }]}>
+        <View
+          style={[
+            styles.avatar,
+            {
+              borderColor: themeColors.icon + "50",
+              overflow: "hidden",
+              borderWidth: 2,
+              width: 54,
+              height: 54,
+              borderRadius: 27,
+              justifyContent: "center",
+              alignItems: "center",
+            },
+          ]}
+        >
           {userSign && ZodiacImages[userSign] ? (
             <Image
               source={ZodiacImages[userSign]}
-              style={{ width: '100%', height: '100%' }}
+              style={{ width: "100%", height: "100%" }}
             />
           ) : (
             <MaterialIcons
