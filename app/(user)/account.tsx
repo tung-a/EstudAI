@@ -1,10 +1,10 @@
+import { ConstellationView, Friend } from "@/components/ConstellationView";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ZodiacImages } from "@/lib/astrology";
-// 1. Renomeamos o import original
+import { getAstralSynergy, SynergyResult, ZodiacImages } from "@/lib/astrology";
 import { MaterialIcons as MaterialIconsOrigin } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
 import {
@@ -12,9 +12,12 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
+  serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -24,51 +27,69 @@ import {
   FlatList,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// 2. Criamos a constante corrigida para o React 19
 const MaterialIcons = MaterialIconsOrigin as unknown as React.ElementType;
 
 type UserData = {
   name: string;
   email: string;
   zodiacSign?: string;
+  preferences?: {
+    notifications?: boolean;
+    publicProfile?: boolean;
+    showSign?: boolean;
+  };
 };
 
-type Friend = {
-  id: string; // ID do documento da amizade
-  friendId: string; // ID do usuário amigo
-  name: string;
-  email: string;
-  zodiacSign?: string;
-};
+const INTENTIONS = [
+  { id: "luz", label: "Luz", icon: "wb-sunny", color: "#FFD700" },
+  {
+    id: "coragem",
+    label: "Coragem",
+    icon: "local-fire-department",
+    color: "#FF5722",
+  },
+  { id: "cura", label: "Cura", icon: "spa", color: "#4CAF50" },
+  { id: "clareza", label: "Clareza", icon: "water-drop", color: "#2196F3" },
+];
 
 export default function AccountScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Estados para o Modal de Busca
   const [isModalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [foundUser, setFoundUser] = useState<Friend | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
 
+  const [notificationModalVisible, setNotificationModalVisible] =
+    useState(false);
+  const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
+
+  const [synergyModalVisible, setSynergyModalVisible] = useState(false);
+  const [synergyData, setSynergyData] = useState<{
+    friend: Friend;
+    result: SynergyResult;
+  } | null>(null);
+  const [sendingIntention, setSendingIntention] = useState<string | null>(null);
+
+  const [viewMode, setViewMode] = useState<"list" | "galaxy">("list");
+
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const currentUser = auth.currentUser;
 
-  // 1. Monitoramento do Perfil e Amigos em Tempo Real
   useEffect(() => {
     if (currentUser) {
-      // Listener do Perfil
       const unsubscribeProfile = onSnapshot(
         doc(db, "users", currentUser.uid),
         (docSnap) => {
@@ -78,22 +99,94 @@ export default function AccountScreen() {
             setUserData({
               name: currentUser.displayName || "Viajante",
               email: currentUser.email || "",
+              preferences: {
+                notifications: true,
+                publicProfile: true,
+                showSign: true,
+              },
             });
           }
           setLoading(false);
         }
       );
 
-      // Listener dos Amigos
       const qFriends = query(
         collection(db, "users", currentUser.uid, "friends")
       );
-      const unsubscribeFriends = onSnapshot(qFriends, (snapshot) => {
-        const friendsList: Friend[] = [];
-        snapshot.forEach((doc) => {
-          friendsList.push({ id: doc.id, ...doc.data() } as Friend);
-        });
-        setFriends(friendsList);
+
+      const unsubscribeFriends = onSnapshot(qFriends, async (snapshot) => {
+        // 1. Mapeamos primeiro para dados básicos para evitar erros de tipagem imediatos
+        const basicFriends = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as Friend)
+        );
+
+        // 2. Atualizamos o estado imediatamente com o básico para a UI não ficar vazia
+        // (Isso ajuda a evitar o crash se a hidratação demorar ou falhar)
+
+        // 3. Iniciamos a hidratação (busca de dados profundos)
+        const hydratedPromises = snapshot.docs.map(
+          async (friendDoc): Promise<Friend> => {
+            const friendData = friendDoc.data() as Omit<Friend, "id">;
+            const friendId = friendData.friendId;
+
+            // Fallback seguro
+            const safeFriend: Friend = {
+              id: friendDoc.id,
+              name: friendData.name || "Viajante", // Garante que sempre tenha nome
+              email: friendData.email || "",
+              friendId: friendData.friendId,
+              zodiacSign: friendData.zodiacSign,
+              ...friendData,
+            };
+
+            if (!friendId) return safeFriend;
+
+            try {
+              const userRef = doc(db, "users", friendId);
+              const userSnap = await getDoc(userRef);
+
+              if (userSnap.exists()) {
+                const userData = userSnap.data();
+                const today = new Date().toISOString().split("T")[0];
+
+                let dailyTarot = undefined;
+                if (userData.dailyTarot && userData.dailyTarot.date === today) {
+                  dailyTarot = userData.dailyTarot;
+                }
+
+                let astralMap = undefined;
+                if (userData.astralMapJson) {
+                  try {
+                    astralMap = JSON.parse(userData.astralMapJson);
+                  } catch (e) {
+                    console.error("JSON parse error", e);
+                  }
+                }
+
+                return {
+                  ...safeFriend,
+                  zodiacSign: userData.zodiacSign || safeFriend.zodiacSign,
+                  name: userData.name || safeFriend.name, // Atualiza nome se mudou
+                  dailyTarot,
+                  astralMap,
+                };
+              }
+            } catch (e) {
+              // Erro silencioso na hidratação, retorna o dado básico
+              // console.log("Hidratação falhou para", friendId);
+            }
+
+            return safeFriend;
+          }
+        );
+
+        try {
+          const finalFriends = await Promise.all(hydratedPromises);
+          setFriends(finalFriends);
+        } catch (err) {
+          // Se falhar tudo, usa o básico
+          setFriends(basicFriends);
+        }
       });
 
       return () => {
@@ -105,54 +198,60 @@ export default function AccountScreen() {
     }
   }, [currentUser]);
 
+  const togglePreference = async (
+    key: keyof NonNullable<UserData["preferences"]>
+  ) => {
+    if (!currentUser || !userData) return;
+    const currentVal = userData.preferences?.[key] ?? true;
+    const newVal = !currentVal;
+    setUserData((prev) =>
+      prev
+        ? { ...prev, preferences: { ...prev.preferences, [key]: newVal } }
+        : null
+    );
+    try {
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        [`preferences.${key}`]: newVal,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const handleSearchUser = async () => {
     if (!searchText.trim()) return;
     setSearchLoading(true);
     setFoundUser(null);
-
     try {
-      // Busca usuário pelo email exato
       const q = query(
         collection(db, "users"),
         where("email", "==", searchText.trim().toLowerCase())
       );
-
       const querySnapshot = await getDocs(q);
-
       if (!querySnapshot.empty) {
         const docData = querySnapshot.docs[0].data();
         const friendId = querySnapshot.docs[0].id;
-
-        // Não permite adicionar a si mesmo
         if (friendId === currentUser?.uid) {
           Alert.alert("Ops", "Você não pode adicionar a si mesmo.");
           setSearchLoading(false);
           return;
         }
-
-        // Verifica se já é amigo
-        const alreadyFriend = friends.some((f) => f.friendId === friendId);
-        if (alreadyFriend) {
+        if (friends.some((f) => f.friendId === friendId)) {
           Alert.alert("Já conectado", "Este viajante já está no seu círculo.");
           setSearchLoading(false);
           return;
         }
-
         setFoundUser({
-          id: "", // Será gerado ao adicionar
+          id: "",
           friendId: friendId,
           name: docData.name || "Sem nome",
           email: docData.email || "",
           zodiacSign: docData.zodiacSign,
         });
       } else {
-        Alert.alert(
-          "Não encontrado",
-          "Nenhum viajante encontrado com este e-mail."
-        );
+        Alert.alert("Não encontrado", "Nenhum viajante encontrado.");
       }
     } catch (error) {
-      console.error(error);
       Alert.alert("Erro", "Falha ao buscar usuário.");
     } finally {
       setSearchLoading(false);
@@ -161,7 +260,6 @@ export default function AccountScreen() {
 
   const handleAddFriend = async () => {
     if (!foundUser || !currentUser) return;
-
     try {
       await addDoc(collection(db, "users", currentUser.uid, "friends"), {
         friendId: foundUser.friendId,
@@ -169,7 +267,6 @@ export default function AccountScreen() {
         email: foundUser.email,
         zodiacSign: foundUser.zodiacSign || null,
       });
-
       Alert.alert("Sucesso", `${foundUser.name} entrou no seu Círculo Mágico!`);
       setModalVisible(false);
       setSearchText("");
@@ -186,42 +283,99 @@ export default function AccountScreen() {
         text: "Remover",
         style: "destructive",
         onPress: async () => {
-          if (currentUser) {
+          if (currentUser)
             await deleteDoc(
               doc(db, "users", currentUser.uid, "friends", friend.id)
             );
-          }
         },
       },
     ]);
   };
 
-  const handleLogout = async () => {
-    if (Platform.OS === "web") {
-      const confirm = window.confirm("Deseja se desconectar do universo?");
-      if (confirm) await signOut(auth);
+  const handleCheckSynergy = (friend: Friend) => {
+    if (!friend) return; // Proteção extra
+
+    if (!userData?.zodiacSign || !friend.zodiacSign) {
+      Alert.alert(
+        "Mapa Incompleto",
+        "Ambos precisam ter o signo definido para calcular a sinergia."
+      );
       return;
     }
+    const result = getAstralSynergy(userData.zodiacSign, friend.zodiacSign);
 
-    Alert.alert("Encerrar Sessão", "Deseja se desconectar do universo?", [
+    setSynergyData({
+      friend: friend,
+      result,
+    });
+    setSynergyModalVisible(true);
+  };
+
+  const handleSendIntention = async (
+    intention: (typeof INTENTIONS)[number]
+  ) => {
+    if (!currentUser || !synergyData || !userData) return;
+    setSendingIntention(intention.id);
+    try {
+      await addDoc(
+        collection(db, "users", synergyData.friend.friendId, "notifications"),
+        {
+          type: "intention",
+          intentionId: intention.id,
+          intentionLabel: intention.label,
+          fromId: currentUser.uid,
+          fromName: userData.name,
+          createdAt: serverTimestamp(),
+          read: false,
+        }
+      );
+
+      // Proteção ao acessar o nome para o alerta
+      const friendName = synergyData.friend.name
+        ? synergyData.friend.name.split(" ")[0]
+        : "Amigo";
+      Alert.alert(
+        "Energia Enviada",
+        `Você enviou vibrações de ${intention.label} para ${friendName}. ✨`
+      );
+
+      setSynergyModalVisible(false);
+    } catch (error) {
+      Alert.alert("Erro", "A energia se dissipou no caminho.");
+    } finally {
+      setSendingIntention(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    Alert.alert("Encerrar Sessão", "Deseja se desconectar?", [
       { text: "Ficar", style: "cancel" },
       { text: "Sair", style: "destructive", onPress: () => signOut(auth) },
     ]);
   };
 
-  if (loading) {
+  const getPlanetInfo = (map: any[], planetName: string) => {
+    if (!map || !Array.isArray(map)) return null;
+    return map.find((p) => p.planet === planetName);
+  };
+
+  // Renderização segura do nome do amigo no modal
+  const renderFriendName = () => {
+    if (!synergyData?.friend?.name) return "Amigo";
+    return synergyData.friend.name.split(" ")[0];
+  };
+
+  if (loading)
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={themeColors.accent} />
       </ThemedView>
     );
-  }
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Cabeçalho do Perfil */}
           <View style={styles.header}>
             <View
               style={[
@@ -244,10 +398,9 @@ export default function AccountScreen() {
               )}
             </View>
             <ThemedText type="title" style={styles.userName}>
-              {userData?.name}
+              {userData?.name || "Viajante"}
             </ThemedText>
             <ThemedText style={styles.userEmail}>{userData?.email}</ThemedText>
-
             {userData?.zodiacSign && (
               <View
                 style={[
@@ -269,7 +422,6 @@ export default function AccountScreen() {
             )}
           </View>
 
-          {/* Seção Círculo Mágico */}
           <View
             style={[styles.sectionCard, { backgroundColor: themeColors.card }]}
           >
@@ -286,20 +438,31 @@ export default function AccountScreen() {
                   Círculo Mágico
                 </ThemedText>
               </View>
-              <TouchableOpacity onPress={() => setModalVisible(true)}>
-                <MaterialIcons
-                  name="person-add"
-                  size={22}
-                  color={themeColors.accent}
-                />
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 15 }}>
+                <TouchableOpacity
+                  onPress={() =>
+                    setViewMode(viewMode === "list" ? "galaxy" : "list")
+                  }
+                >
+                  <MaterialIcons
+                    name={viewMode === "list" ? "auto-graph" : "view-list"}
+                    size={24}
+                    color={themeColors.icon}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setModalVisible(true)}>
+                  <MaterialIcons
+                    name="person-add"
+                    size={24}
+                    color={themeColors.accent}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-
             {friends.length === 0 ? (
               <View style={styles.emptyState}>
                 <ThemedText style={styles.emptyText}>
-                  Seu círculo está vazio. Adicione amigos para conectar
-                  energias!
+                  Seu círculo está vazio.
                 </ThemedText>
                 <TouchableOpacity
                   style={[
@@ -313,7 +476,7 @@ export default function AccountScreen() {
                   </ThemedText>
                 </TouchableOpacity>
               </View>
-            ) : (
+            ) : viewMode === "list" ? (
               <FlatList
                 data={friends}
                 horizontal
@@ -323,6 +486,7 @@ export default function AccountScreen() {
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.friendItem}
+                    onPress={() => handleCheckSynergy(item)}
                     onLongPress={() => handleRemoveFriend(item)}
                   >
                     <View
@@ -345,7 +509,7 @@ export default function AccountScreen() {
                       )}
                     </View>
                     <ThemedText numberOfLines={1} style={styles.friendName}>
-                      {item.name.split(" ")[0]}
+                      {item.name ? item.name.split(" ")[0] : "Amigo"}
                     </ThemedText>
                     {item.zodiacSign && (
                       <ThemedText
@@ -357,14 +521,24 @@ export default function AccountScreen() {
                   </TouchableOpacity>
                 )}
               />
+            ) : (
+              userData && (
+                <ConstellationView
+                  user={userData}
+                  friends={friends}
+                  onPressFriend={handleCheckSynergy}
+                />
+              )
             )}
           </View>
 
-          {/* Configurações e Ações */}
           <View
             style={[styles.sectionCard, { backgroundColor: themeColors.card }]}
           >
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setNotificationModalVisible(true)}
+            >
               <MaterialIcons
                 name="notifications-none"
                 size={22}
@@ -377,15 +551,16 @@ export default function AccountScreen() {
                 color={themeColors.icon}
               />
             </TouchableOpacity>
-
             <View
               style={[
                 styles.separator,
                 { backgroundColor: themeColors.icon + "20" },
               ]}
             />
-
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setPrivacyModalVisible(true)}
+            >
               <MaterialIcons
                 name="lock-outline"
                 size={22}
@@ -399,8 +574,6 @@ export default function AccountScreen() {
               />
             </TouchableOpacity>
           </View>
-
-          {/* Botão de Logout */}
           <TouchableOpacity
             style={[
               styles.logoutButton,
@@ -419,12 +592,204 @@ export default function AccountScreen() {
               Sair da Conta
             </ThemedText>
           </TouchableOpacity>
-
-          <ThemedText style={styles.versionText}>VibeAI v1.1.0</ThemedText>
+          <ThemedText style={styles.versionText}>Astrum v1.5.0</ThemedText>
         </ScrollView>
       </SafeAreaView>
 
-      {/* Modal de Adicionar Amigo */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={synergyModalVisible}
+        onRequestClose={() => setSynergyModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <ThemedView
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.card, padding: 24 },
+            ]}
+          >
+            {synergyData && (
+              <>
+                <View style={{ alignItems: "center", marginBottom: 15 }}>
+                  <MaterialIcons
+                    name="auto-awesome"
+                    size={40}
+                    color={themeColors.accent}
+                  />
+                  {/* CORREÇÃO DO CRASH: Usando função segura para renderizar nome */}
+                  <ThemedText type="subtitle" style={{ marginTop: 10 }}>
+                    {renderFriendName()}
+                  </ThemedText>
+                  <ThemedText style={{ opacity: 0.6, fontSize: 12 }}>
+                    Perfil Astral
+                  </ThemedText>
+                </View>
+
+                {synergyData.friend.astralMap ? (
+                  <View style={styles.triadContainer}>
+                    <View style={styles.triadItem}>
+                      <MaterialIcons
+                        name="wb-sunny"
+                        size={18}
+                        color="#FFD700"
+                      />
+                      <ThemedText style={styles.triadLabel}>Sol</ThemedText>
+                      <ThemedText style={styles.triadValue}>
+                        {getPlanetInfo(synergyData.friend.astralMap, "Sol")
+                          ?.sign || "-"}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.triadItem, styles.triadBorder]}>
+                      <MaterialIcons
+                        name="nights-stay"
+                        size={18}
+                        color="#B0BEC5"
+                      />
+                      <ThemedText style={styles.triadLabel}>Lua</ThemedText>
+                      <ThemedText style={styles.triadValue}>
+                        {getPlanetInfo(synergyData.friend.astralMap, "Lua")
+                          ?.sign || "-"}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.triadItem}>
+                      <MaterialIcons
+                        name="arrow-upward"
+                        size={18}
+                        color={themeColors.accent}
+                      />
+                      <ThemedText style={styles.triadLabel}>Asc</ThemedText>
+                      <ThemedText style={styles.triadValue}>
+                        {getPlanetInfo(
+                          synergyData.friend.astralMap,
+                          "Ascendente"
+                        )?.sign || "-"}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.triadEmpty}>
+                    <ThemedText
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.6,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Mapa astral não revelado.
+                    </ThemedText>
+                  </View>
+                )}
+
+                <View
+                  style={[
+                    styles.synergyCard,
+                    { borderColor: themeColors.accent + "40", marginTop: 15 },
+                  ]}
+                >
+                  <View style={styles.elementsRow}>
+                    <View style={styles.elementBadge}>
+                      <ThemedText style={styles.elementText}>
+                        {synergyData.result.elementA}
+                      </ThemedText>
+                    </View>
+                    <MaterialIcons
+                      name="sync-alt"
+                      size={20}
+                      color={themeColors.icon}
+                    />
+                    <View style={styles.elementBadge}>
+                      <ThemedText style={styles.elementText}>
+                        {synergyData.result.elementB}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText
+                    type="defaultSemiBold"
+                    style={{
+                      textAlign: "center",
+                      marginBottom: 4,
+                      color: themeColors.accent,
+                    }}
+                  >
+                    {synergyData.result.title}
+                  </ThemedText>
+                  <ThemedText
+                    style={{
+                      textAlign: "center",
+                      fontSize: 13,
+                      lineHeight: 18,
+                    }}
+                  >
+                    {synergyData.result.description}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.intentionsContainer}>
+                  <ThemedText
+                    type="defaultSemiBold"
+                    style={styles.intentionsTitle}
+                  >
+                    Enviar Vibração
+                  </ThemedText>
+                  <View style={styles.intentionsRow}>
+                    {INTENTIONS.map((intention) => (
+                      <TouchableOpacity
+                        key={intention.id}
+                        style={[
+                          styles.intentionButton,
+                          {
+                            backgroundColor: intention.color + "15",
+                            borderColor: intention.color + "40",
+                          },
+                        ]}
+                        onPress={() => handleSendIntention(intention)}
+                        disabled={sendingIntention !== null}
+                      >
+                        {sendingIntention === intention.id ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={intention.color}
+                          />
+                        ) : (
+                          <>
+                            <MaterialIcons
+                              name={intention.icon}
+                              size={20}
+                              color={intention.color}
+                            />
+                            <ThemedText
+                              style={[
+                                styles.intentionLabel,
+                                { color: intention.color },
+                              ]}
+                            >
+                              {intention.label}
+                            </ThemedText>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.searchButton,
+                    { backgroundColor: themeColors.accent, marginTop: 15 },
+                  ]}
+                  onPress={() => setSynergyModalVisible(false)}
+                >
+                  <ThemedText style={{ color: "#FFF", fontWeight: "bold" }}>
+                    Fechar
+                  </ThemedText>
+                </TouchableOpacity>
+              </>
+            )}
+          </ThemedView>
+        </View>
+      </Modal>
+
       <Modal
         animationType="fade"
         transparent={true}
@@ -445,11 +810,9 @@ export default function AccountScreen() {
                 />
               </TouchableOpacity>
             </View>
-
             <ThemedText style={styles.modalSubtitle}>
-              Busque um viajante pelo e-mail para conectarem suas jornadas.
+              Busque um viajante pelo e-mail.
             </ThemedText>
-
             <View
               style={[
                 styles.inputContainer,
@@ -467,7 +830,6 @@ export default function AccountScreen() {
                 keyboardType="email-address"
               />
             </View>
-
             {searchLoading ? (
               <ActivityIndicator
                 style={{ marginTop: 20 }}
@@ -546,6 +908,135 @@ export default function AccountScreen() {
           </ThemedView>
         </View>
       </Modal>
+      {/* Modais de Config (Notificações/Privacidade) mantidos iguais */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={notificationModalVisible}
+        onRequestClose={() => setNotificationModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <ThemedView
+            style={[styles.modalContent, { backgroundColor: themeColors.card }]}
+          >
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle">Notificações</ThemedText>
+              <TouchableOpacity
+                onPress={() => setNotificationModalVisible(false)}
+              >
+                <MaterialIcons
+                  name="close"
+                  size={24}
+                  color={themeColors.icon}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.switchRow}>
+              <View>
+                <ThemedText style={styles.switchLabel}>
+                  Permitir Notificações
+                </ThemedText>
+                <ThemedText style={styles.switchSubLabel}>
+                  Receber alertas de rituais e amigos.
+                </ThemedText>
+              </View>
+              <Switch
+                trackColor={{ false: "#767577", true: themeColors.accent }}
+                thumbColor={"#f4f3f4"}
+                onValueChange={() => togglePreference("notifications")}
+                value={userData?.preferences?.notifications ?? true}
+              />
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.searchButton,
+                { backgroundColor: themeColors.accent, marginTop: 30 },
+              ]}
+              onPress={() => setNotificationModalVisible(false)}
+            >
+              <ThemedText style={{ color: "#FFF", fontWeight: "bold" }}>
+                Concluído
+              </ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={privacyModalVisible}
+        onRequestClose={() => setPrivacyModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <ThemedView
+            style={[styles.modalContent, { backgroundColor: themeColors.card }]}
+          >
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle">Privacidade</ThemedText>
+              <TouchableOpacity onPress={() => setPrivacyModalVisible(false)}>
+                <MaterialIcons
+                  name="close"
+                  size={24}
+                  color={themeColors.icon}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.switchRow}>
+              <View>
+                <ThemedText style={styles.switchLabel}>
+                  Perfil Público
+                </ThemedText>
+                <ThemedText style={styles.switchSubLabel}>
+                  Permitir que outros viajantes te encontrem.
+                </ThemedText>
+              </View>
+              <Switch
+                trackColor={{ false: "#767577", true: themeColors.accent }}
+                thumbColor={"#f4f3f4"}
+                onValueChange={() => togglePreference("publicProfile")}
+                value={userData?.preferences?.publicProfile ?? true}
+              />
+            </View>
+            <View
+              style={[
+                styles.separator,
+                {
+                  backgroundColor: themeColors.icon + "20",
+                  marginVertical: 15,
+                },
+              ]}
+            />
+            <View style={styles.switchRow}>
+              <View>
+                <ThemedText style={styles.switchLabel}>
+                  Mostrar Signo
+                </ThemedText>
+                <ThemedText style={styles.switchSubLabel}>
+                  Exibir seu signo no Círculo Mágico.
+                </ThemedText>
+              </View>
+              <Switch
+                trackColor={{ false: "#767577", true: themeColors.accent }}
+                thumbColor={"#f4f3f4"}
+                onValueChange={() => togglePreference("showSign")}
+                value={userData?.preferences?.showSign ?? true}
+              />
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.searchButton,
+                { backgroundColor: themeColors.accent, marginTop: 30 },
+              ]}
+              onPress={() => setPrivacyModalVisible(false)}
+            >
+              <ThemedText style={{ color: "#FFF", fontWeight: "bold" }}>
+                Concluído
+              </ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -555,7 +1046,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   scrollContent: { padding: 20, paddingBottom: 40 },
-
   header: { alignItems: "center", marginBottom: 30 },
   avatarContainer: {
     width: 100,
@@ -568,15 +1058,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(156, 39, 176, 0.1)",
     overflow: "hidden",
   },
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 50,
-  },
-  avatarImageSmall: {
-    width: "100%",
-    height: "100%",
-  },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 50 },
+  avatarImageSmall: { width: "100%", height: "100%" },
   userName: { fontSize: 24, fontWeight: "bold", marginBottom: 4 },
   userEmail: { fontSize: 14, opacity: 0.6, marginBottom: 12 },
   signBadge: {
@@ -588,7 +1071,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   signText: { fontWeight: "600", fontSize: 14 },
-
   sectionCard: {
     borderRadius: 16,
     padding: 16,
@@ -620,7 +1102,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: "dashed",
   },
-
   friendsList: { gap: 16, paddingVertical: 5 },
   friendItem: { alignItems: "center", width: 70 },
   friendAvatar: {
@@ -636,15 +1117,9 @@ const styles = StyleSheet.create({
   },
   friendName: { fontSize: 12, fontWeight: "600" },
   friendSign: { fontSize: 10, opacity: 0.8 },
-
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-  },
+  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
   menuText: { flex: 1, marginLeft: 12, fontSize: 16 },
   separator: { height: 1, marginVertical: 4 },
-
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -658,7 +1133,6 @@ const styles = StyleSheet.create({
   },
   logoutText: { fontSize: 16, fontWeight: "bold" },
   versionText: { textAlign: "center", opacity: 0.3, fontSize: 12 },
-
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -683,11 +1157,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-  modalSubtitle: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginBottom: 20,
-  },
+  modalSubtitle: { fontSize: 14, opacity: 0.7, marginBottom: 20 },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -697,11 +1167,7 @@ const styles = StyleSheet.create({
     height: 50,
     marginBottom: 20,
   },
-  input: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-  },
+  input: { flex: 1, marginLeft: 10, fontSize: 16 },
   searchButton: {
     height: 50,
     borderRadius: 12,
@@ -716,8 +1182,81 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 10,
   },
-  addButton: {
-    padding: 10,
-    borderRadius: 25,
+  addButton: { padding: 10, borderRadius: 25 },
+  synergyCard: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    backgroundColor: "rgba(128,128,128,0.05)",
   },
+  elementsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+  elementBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(128,128,128,0.1)",
+  },
+  elementText: { fontSize: 12, fontWeight: "bold", textTransform: "uppercase" },
+  scoreContainer: { flexDirection: "row", marginTop: 15, gap: 4 },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 5,
+  },
+  switchLabel: { fontSize: 16, fontWeight: "600", marginBottom: 4 },
+  switchSubLabel: { fontSize: 12, opacity: 0.6, maxWidth: "80%" },
+  intentionsContainer: { marginTop: 20, width: "100%" },
+  intentionsTitle: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  intentionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  intentionButton: {
+    flexBasis: "48%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  intentionLabel: { fontSize: 13, fontWeight: "600" },
+  triadContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+    paddingVertical: 10,
+    backgroundColor: "rgba(128,128,128,0.05)",
+    borderRadius: 12,
+  },
+  triadItem: { alignItems: "center", flex: 1 },
+  triadBorder: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "rgba(128,128,128,0.1)",
+  },
+  triadLabel: {
+    fontSize: 10,
+    opacity: 0.5,
+    textTransform: "uppercase",
+    marginTop: 4,
+  },
+  triadValue: { fontSize: 14, fontWeight: "bold", marginTop: 2 },
+  triadEmpty: { alignItems: "center", padding: 10, opacity: 0.5 },
 });

@@ -10,6 +10,8 @@ import { DrawerActions, useNavigation } from "@react-navigation/native";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { TouchableOpacity } from "react-native-gesture-handler";
+// IMPORTAÇÃO DO NOVO COMPONENTE
+import { NotificationManager } from "@/components/NotificationManager";
 
 const Drawer = createDrawerNavigator();
 
@@ -36,10 +38,9 @@ function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Cosmos", // Home virou Cosmos
+          title: "Cosmos",
           headerShown: false,
           tabBarIcon: ({ color }) => (
-            // IconSymbol precisa ter mapeamento ou usar MaterialIcons direto se falhar
             <MaterialIcons name="auto-awesome" size={28} color={color} />
           ),
         }}
@@ -47,7 +48,7 @@ function TabLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: "Oráculo", // Chat virou Oráculo
+          title: "Oráculo",
           headerShown: true,
           headerTitle: "",
           headerLeft: () => (
@@ -74,7 +75,7 @@ function TabLayout() {
       <Tabs.Screen
         name="agenda"
         options={{
-          title: "Rituais", // Agenda virou Rituais
+          title: "Rituais",
           headerShown: false,
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="calendar-today" size={28} color={color} />
@@ -84,7 +85,7 @@ function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Astral", // Perfil virou Astral
+          title: "Astral",
           headerShown: false,
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="star" size={28} color={color} />
@@ -94,7 +95,7 @@ function TabLayout() {
       <Tabs.Screen
         name="account"
         options={{
-          title: "Perfil", // Nome que aparece na aba
+          title: "Perfil",
           headerShown: false,
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="person" size={28} color={color} />
@@ -108,6 +109,8 @@ function TabLayout() {
 export default function UserDrawerLayout() {
   return (
     <ChatProvider>
+      {/* O NotificationManager fica aqui para funcionar em todo o app */}
+      <NotificationManager />
       <Drawer.Navigator
         drawerContent={(props) => <CustomDrawerContent {...props} />}
         screenOptions={{
