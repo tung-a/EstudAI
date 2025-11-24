@@ -32,6 +32,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+// IMPORTAÇÃO DO NOVO COMPONENTE
+import { MeditationModal } from "@/components/MeditationModal";
 
 type Event = {
   id: string;
@@ -65,7 +67,6 @@ const MAJOR_ARCANA = [
   "O Mundo",
 ];
 
-// --- COMPONENTE: CARTA DE TAROT ANIMADA ---
 const TarotCardOption = ({
   onPress,
   disabled,
@@ -100,7 +101,6 @@ const TarotCardOption = ({
   </TouchableOpacity>
 );
 
-// Habilita animações de layout no Android
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -124,6 +124,10 @@ export default function HomeScreen() {
 
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [deckModalVisible, setDeckModalVisible] = useState(false);
+
+  // NOVO ESTADO PARA MEDITAÇÃO
+  const [meditationVisible, setMeditationVisible] = useState(false);
+
   const [modalContent, setModalContent] = useState<{
     title: string;
     content: string;
@@ -225,14 +229,11 @@ export default function HomeScreen() {
     if (Platform.OS === "web") return;
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      /* haptics not supported here */
-    }
+    } catch {}
   }, []);
 
   useEffect(() => {
     if (deckModalVisible && !tarotCard) {
-      // Reseta e inicia a sequência: Entrada -> Balanço (Vibração Visual)
       playEntranceSequence();
     }
   }, [deckModalVisible, tarotCard, playEntranceSequence]);
@@ -247,7 +248,6 @@ export default function HomeScreen() {
     return d.toISOString().split("T")[0];
   };
 
-  // 1. Autenticação: Apenas define o usuário
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -258,29 +258,19 @@ export default function HomeScreen() {
     return () => unsubscribeAuth();
   }, []);
 
-  // 2. Dados do Usuário (Snapshot em tempo real para evitar condição de corrida)
   useEffect(() => {
     if (!user) return;
-
     const userDocRef = doc(db, "users", user.uid);
-
-    // Ouve mudanças no documento do usuário.
-    // Isso garante que se o registro ainda estiver salvando o 'zodiacSign',
-    // a tela atualizará assim que o dado chegar.
     const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-
         if (data.zodiacSign) {
           setUserSign(data.zodiacSign);
         }
-
         const today = getTodayKey();
-
         if (data.dailyHoroscope && data.dailyHoroscope.date === today) {
           setHoroscope(data.dailyHoroscope.content);
         }
-
         if (data.dailyTarot && data.dailyTarot.date === today) {
           setTarotCard({
             name: data.dailyTarot.card,
@@ -289,47 +279,32 @@ export default function HomeScreen() {
         }
       }
     });
-
     return () => unsubscribeSnapshot();
   }, [user]);
 
-  // 3. Gera o horóscopo APENAS quando temos o usuário E o signo
   useEffect(() => {
     const generateHoroscope = async () => {
       if (!user || !userSign || horoscope || horoscopeLoading) return;
-
       setHoroscopeLoading(true);
       try {
         const model = getChatModel();
         const prompt = `Gere um horóscopo do dia curto e inspirador para o signo de ${userSign}. Foco: autoconhecimento. Máximo de 3 frases.`;
         const result = await model.generateContent(prompt);
         const text = result.response.text();
-
         setHoroscope(text);
-
         await updateDoc(doc(db, "users", user.uid), {
-          dailyHoroscope: {
-            date: getTodayKey(),
-            content: text,
-          },
+          dailyHoroscope: { date: getTodayKey(), content: text },
         });
       } catch (error: any) {
-        if (error.message?.includes("429")) {
-          setHoroscope(
-            "O oráculo está descansando. Tente novamente mais tarde."
-          );
-        } else {
-          setHoroscope("As estrelas estão se realinhando.");
-        }
+        setHoroscope("As estrelas estão se realinhando.");
       } finally {
         setHoroscopeLoading(false);
       }
     };
-
     if (user && userSign) {
       generateHoroscope();
     }
-  }, [user, userSign]); // Remove 'horoscope' da dependência para evitar loop se a lógica mudar, mas mantém 'userSign'
+  }, [user, userSign]);
 
   const openTarotDeck = () => {
     if (tarotCard) {
@@ -348,35 +323,19 @@ export default function HomeScreen() {
     setSelectedCardIndex(cardIndex);
     stopShakeSequence();
     animateCardSelection(cardIndex);
-
     try {
       const randomCard =
         MAJOR_ARCANA[Math.floor(Math.random() * MAJOR_ARCANA.length)];
       const model = getChatModel();
-      const prompt = `O usuário tirou a carta de Tarot "${randomCard}" para o dia de hoje.
-      Dê uma interpretação mística, direta e curta (2 a 3 frases) sobre o conselho dessa carta para o momento.
-      Seja enigmático mas útil.`;
-
+      const prompt = `O usuário tirou a carta de Tarot "${randomCard}" para o dia de hoje. Dê uma interpretação mística, direta e curta (2 a 3 frases).`;
       const result = await model.generateContent(prompt);
       const meaning = result.response.text().trim();
-
-      setTarotCard({
-        name: randomCard,
-        meaning: meaning,
-      });
-
+      setTarotCard({ name: randomCard, meaning: meaning });
       await triggerSuccessHaptic();
-
       await updateDoc(doc(db, "users", user.uid), {
-        dailyTarot: {
-          date: getTodayKey(),
-          card: randomCard,
-          meaning: meaning,
-        },
+        dailyTarot: { date: getTodayKey(), card: randomCard, meaning: meaning },
       });
-
       await triggerSuccessHaptic();
-
       cardRevealAnim.setValue(0);
       Animated.spring(cardRevealAnim, {
         toValue: 1,
@@ -389,7 +348,7 @@ export default function HomeScreen() {
       playEntranceSequence();
       setSelectedCardIndex(null);
       if (error.message?.includes("429")) {
-        alert("O oráculo está sobrecarregado. Tente novamente em 1 minuto.");
+        alert("O oráculo está sobrecarregado.");
         setDeckModalVisible(false);
       }
     } finally {
@@ -458,21 +417,17 @@ export default function HomeScreen() {
   }, [user]);
 
   const userName = user?.displayName?.split(" ")[0] || "Viajante";
-
   const backInterpolate = cardRevealAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "180deg"],
   });
-
   const frontInterpolate = cardRevealAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["180deg", "360deg"],
   });
-
   const backAnimatedStyle = {
     transform: [{ perspective: 1000 }, { rotateY: backInterpolate }],
   };
-
   const frontAnimatedStyle = {
     transform: [{ perspective: 1000 }, { rotateY: frontInterpolate }],
   };
@@ -723,12 +678,32 @@ export default function HomeScreen() {
                   Ver meu Mapa Astral
                 </ThemedText>
               </TouchableOpacity>
+              {/* NOVO BOTÃO DE MEDITAÇÃO */}
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: themeColors.accent + "1A" },
+                ]}
+                onPress={() => setMeditationVisible(true)}
+              >
+                <MaterialIcons
+                  name="self-improvement"
+                  size={20}
+                  color={themeColors.accent}
+                  style={styles.actionIcon}
+                />
+                <ThemedText
+                  style={[styles.actionText, { color: themeColors.accent }]}
+                >
+                  Entrar no Santuário (Meditar)
+                </ThemedText>
+              </TouchableOpacity>
             </View>
           </ThemedView>
         </ScrollView>
       </SafeAreaView>
 
-      {/* --- MODAL MESA DE TAROT --- */}
+      {/* MODAL MESA DE TAROT */}
       <Modal
         visible={deckModalVisible}
         transparent
@@ -759,64 +734,58 @@ export default function HomeScreen() {
                 ? "O universo falou."
                 : "Escolha uma carta com sua intuição"}
             </Text>
-
             <View style={styles.cardsRow}>
               {!tarotCard ? (
-                [0, 1, 2].map((cardIndex) => {
-                  const rotate =
-                    cardIndex === 0
-                      ? "-5deg"
-                      : cardIndex === 2
-                      ? "5deg"
-                      : "0deg";
-                  const marginTop = cardIndex === 1 ? 0 : 20;
-
-                  return (
-                    <TarotCardOption
-                      key={`tarot-card-${cardIndex}`}
-                      onPress={() => handleChooseCard(cardIndex)}
-                      disabled={isChoosing}
-                      isInactive={
-                        selectedCardIndex !== null &&
-                        selectedCardIndex !== cardIndex
-                      }
-                      stackOrder={
-                        selectedCardIndex === cardIndex ? 10 : cardIndex + 1
-                      }
-                      accessibilityLabel={`Carta ${cardIndex + 1}`}
-                      animatedStyle={{
-                        marginTop,
-                        transform: [
-                          {
-                            translateY: cardMotionValues[cardIndex].interpolate(
-                              {
-                                inputRange: [-0.3, 0, 1, 2],
-                                outputRange: [-20, 0, 120, 400],
-                              }
-                            ),
-                          },
-                          {
-                            scale: cardMotionValues[cardIndex].interpolate({
-                              inputRange: [-0.3, 0, 1, 2],
-                              outputRange: [1.05, 1, 0.95, 0.9],
-                            }),
-                          },
-                          {
-                            rotateZ: cardShakeValues[cardIndex].interpolate({
-                              inputRange: [-1, 0, 1],
-                              outputRange: ["-1.6deg", "0deg", "1.6deg"],
-                            }),
-                          },
-                          { rotate },
-                        ],
-                        opacity: cardMotionValues[cardIndex].interpolate({
-                          inputRange: [0, 1.5, 2],
-                          outputRange: [1, 1, 0],
-                        }),
-                      }}
-                    />
-                  );
-                })
+                [0, 1, 2].map((cardIndex) => (
+                  <TarotCardOption
+                    key={`tarot-card-${cardIndex}`}
+                    onPress={() => handleChooseCard(cardIndex)}
+                    disabled={isChoosing}
+                    isInactive={
+                      selectedCardIndex !== null &&
+                      selectedCardIndex !== cardIndex
+                    }
+                    stackOrder={
+                      selectedCardIndex === cardIndex ? 10 : cardIndex + 1
+                    }
+                    accessibilityLabel={`Carta ${cardIndex + 1}`}
+                    animatedStyle={{
+                      marginTop: cardIndex === 1 ? 0 : 20,
+                      transform: [
+                        {
+                          translateY: cardMotionValues[cardIndex].interpolate({
+                            inputRange: [-0.3, 0, 1, 2],
+                            outputRange: [-20, 0, 120, 400],
+                          }),
+                        },
+                        {
+                          scale: cardMotionValues[cardIndex].interpolate({
+                            inputRange: [-0.3, 0, 1, 2],
+                            outputRange: [1.05, 1, 0.95, 0.9],
+                          }),
+                        },
+                        {
+                          rotateZ: cardShakeValues[cardIndex].interpolate({
+                            inputRange: [-1, 0, 1],
+                            outputRange: ["-1.6deg", "0deg", "1.6deg"],
+                          }),
+                        },
+                        {
+                          rotate:
+                            cardIndex === 0
+                              ? "-5deg"
+                              : cardIndex === 2
+                              ? "5deg"
+                              : "0deg",
+                        },
+                      ],
+                      opacity: cardMotionValues[cardIndex].interpolate({
+                        inputRange: [0, 1.5, 2],
+                        outputRange: [1, 1, 0],
+                      }),
+                    }}
+                  />
+                ))
               ) : (
                 <View style={styles.flipContainer}>
                   <Animated.View
@@ -832,7 +801,6 @@ export default function HomeScreen() {
                       color="rgba(255,255,255,0.5)"
                     />
                   </Animated.View>
-
                   <Animated.View
                     style={[
                       styles.flipCard,
@@ -867,7 +835,6 @@ export default function HomeScreen() {
                 </View>
               )}
             </View>
-
             {isChoosing && !tarotCard && (
               <ActivityIndicator
                 size="large"
@@ -875,7 +842,6 @@ export default function HomeScreen() {
                 style={{ marginTop: 40 }}
               />
             )}
-
             {tarotCard && (
               <TouchableOpacity
                 style={[
@@ -897,7 +863,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Detalhes */}
+      {/* Modal de Detalhes (Horóscopo/Tarot) */}
       <Modal
         visible={detailsModalVisible}
         transparent
@@ -927,13 +893,11 @@ export default function HomeScreen() {
                 />
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalBody}>
               <ThemedText style={styles.modalText}>
                 {modalContent.content}
               </ThemedText>
             </ScrollView>
-
             <View style={styles.modalActions}>
               {modalContent.type === "tarot" && (
                 <TouchableOpacity
@@ -959,7 +923,6 @@ export default function HomeScreen() {
                   </ThemedText>
                 </TouchableOpacity>
               )}
-
               <TouchableOpacity
                 style={[
                   styles.modalButton,
@@ -975,6 +938,13 @@ export default function HomeScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      {/* NOVO MODAL DE MEDITAÇÃO */}
+      <MeditationModal
+        visible={meditationVisible}
+        onClose={() => setMeditationVisible(false)}
+        userSign={userSign}
+      />
     </ThemedView>
   );
 }
@@ -1117,7 +1087,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: "center",
-  }, // REMOVIDO flex: 1
+  },
   modalButtonSecondary: {
     paddingVertical: 12,
     paddingHorizontal: 15,
@@ -1129,8 +1099,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalButtonText: { fontWeight: "bold", fontSize: 15 },
-
-  // Styles do Deck Modal (Mesa de Tarot)
   deckModalOverlay: { flex: 1, justifyContent: "center", alignItems: "center" },
   deckBackground: {
     position: "absolute",
