@@ -7,6 +7,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "expo-router";
+import * as Speech from "expo-speech"; // <--- IMPORT DO SPEECH
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
   collection,
@@ -158,6 +159,7 @@ export default function HomeScreen() {
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [deckModalVisible, setDeckModalVisible] = useState(false);
   const [meditationVisible, setMeditationVisible] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false); // Estado de fala
 
   const [modalContent, setModalContent] = useState<{
     title: string;
@@ -170,6 +172,32 @@ export default function HomeScreen() {
     icon: "auto-awesome",
     type: "horoscope",
   });
+
+  // --- FUNÇÃO DE FALA (TTS) ---
+  const handleSpeak = () => {
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+    } else {
+      setIsSpeaking(true);
+      Speech.speak(modalContent.content, {
+        language: "pt-PT", // Português de Portugal para tom solene
+        pitch: 1.0,
+        rate: 0.9, // Levemente mais lento
+        onDone: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+      });
+    }
+  };
+
+  // Para a fala quando o modal fecha
+  useEffect(() => {
+    if (!detailsModalVisible) {
+      Speech.stop();
+      setIsSpeaking(false);
+    }
+  }, [detailsModalVisible]);
 
   // --- ANIMAÇÕES DO TAROT ---
   const [isChoosing, setIsChoosing] = useState(false);
@@ -475,8 +503,6 @@ export default function HomeScreen() {
     transform: [{ perspective: 1000 }, { rotateY: frontInterpolate }],
   };
 
-  // CORREÇÃO: Texto da carta deve ser branco (ou cor da skin)
-  // para garantir contraste sobre o gradiente da skin
   const cardFrontTitleColor = currentSkinStyle.iconColor;
   const cardFrontTextColor = "#FFFFFF";
 
@@ -541,12 +567,11 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Tarot do Dia (COM CORREÇÃO DE SKIN E TEXTO) */}
+            {/* Tarot do Dia */}
             <TouchableOpacity
               style={[
                 styles.gridCard,
                 styles.tarotCardTouchable,
-                // Removemos padding e borda para o gradiente preencher
                 tarotCard
                   ? {
                       borderWidth: 0,
@@ -562,7 +587,7 @@ export default function HomeScreen() {
               onPress={openTarotDeck}
               activeOpacity={0.9}
             >
-              {/* Verso (Skin) */}
+              {/* Verso */}
               {!tarotCard && (
                 <View
                   style={[
@@ -616,22 +641,19 @@ export default function HomeScreen() {
                     overflow: "hidden",
                   }}
                 >
-                  {/* Fundo: Gradiente da Skin */}
                   <LinearGradient
                     colors={currentSkinStyle.colors as [string, string]}
                     style={StyleSheet.absoluteFill}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                   />
-
-                  {/* Conteúdo com Sombra leve para contraste */}
                   <View
                     style={{
                       flex: 1,
                       justifyContent: "center",
                       alignItems: "center",
                       padding: 15,
-                      backgroundColor: "rgba(0,0,0,0.25)", // Sombra para garantir leitura
+                      backgroundColor: "rgba(0,0,0,0.25)",
                     }}
                   >
                     <MaterialIcons
@@ -816,7 +838,7 @@ export default function HomeScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* --- MODAL MESA DE TAROT (COM SKINS) --- */}
+      {/* --- MODAL MESA DE TAROT --- */}
       <Modal
         visible={deckModalVisible}
         transparent
@@ -907,7 +929,6 @@ export default function HomeScreen() {
                 })
               ) : (
                 <View style={styles.flipContainer}>
-                  {/* Verso (Skin) */}
                   <Animated.View
                     style={[
                       styles.flipCard,
@@ -932,8 +953,6 @@ export default function HomeScreen() {
                       color={currentSkinStyle.iconColor}
                     />
                   </Animated.View>
-
-                  {/* Frente (Skin preenchendo tudo) */}
                   <Animated.View
                     style={[
                       styles.flipCard,
@@ -956,7 +975,7 @@ export default function HomeScreen() {
                         justifyContent: "center",
                         alignItems: "center",
                         padding: 20,
-                        backgroundColor: "rgba(0,0,0,0.25)",
+                        backgroundColor: "rgba(0,0,0,0.2)",
                       }}
                     >
                       <MaterialIcons
@@ -1018,7 +1037,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Detalhes (COM SKIN APLICADA) */}
+      {/* --- MODAL DE DETALHES (COM TTS E SKIN) --- */}
       <Modal
         visible={detailsModalVisible}
         transparent
@@ -1026,22 +1045,20 @@ export default function HomeScreen() {
         onRequestClose={() => setDetailsModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          {/* Usamos View comum + Gradiente */}
           <View
             style={[
               styles.modalContent,
               { backgroundColor: "transparent", overflow: "hidden" },
             ]}
           >
-            {/* 1. Fundo: Gradiente da Skin */}
+            {/* 1. Fundo Gradiente da Skin */}
             <LinearGradient
               colors={currentSkinStyle.colors as [string, string]}
               style={StyleSheet.absoluteFill}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             />
-
-            {/* 2. Overlay Escuro: Para garantir leitura */}
+            {/* 2. Overlay Escuro */}
             <View
               style={[
                 StyleSheet.absoluteFill,
@@ -1052,7 +1069,12 @@ export default function HomeScreen() {
             {/* 3. Conteúdo */}
             <View style={styles.modalHeader}>
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  flex: 1,
+                }}
               >
                 <MaterialIcons
                   name={modalContent.icon}
@@ -1063,13 +1085,31 @@ export default function HomeScreen() {
                   {modalContent.title}
                 </ThemedText>
               </View>
-              <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
-                <MaterialIcons
-                  name="close"
-                  size={24}
-                  color="rgba(255,255,255,0.7)"
-                />
-              </TouchableOpacity>
+
+              {/* Controles: Falar e Fechar */}
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 15 }}
+              >
+                <TouchableOpacity onPress={handleSpeak} hitSlop={10}>
+                  <MaterialIcons
+                    name={isSpeaking ? "stop" : "volume-up"}
+                    size={24}
+                    color={
+                      isSpeaking ? themeColors.accent : "rgba(255,255,255,0.9)"
+                    }
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setDetailsModalVisible(false)}
+                  hitSlop={10}
+                >
+                  <MaterialIcons
+                    name="close"
+                    size={24}
+                    color="rgba(255,255,255,0.7)"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView style={styles.modalBody}>
@@ -1146,7 +1186,6 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 16, opacity: 0.7, marginTop: 6 },
   gridContainer: { flexDirection: "row", gap: 12, marginBottom: 24 },
 
-  // CORREÇÃO DA ALTURA DO CARD
   gridCard: {
     flex: 1,
     borderRadius: 16,

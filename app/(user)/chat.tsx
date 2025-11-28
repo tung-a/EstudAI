@@ -5,12 +5,13 @@ import { useChat } from "@/contexts/ChatContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { logSendMessage } from "@/lib/analytics";
 import { MaterialIcons } from "@expo/vector-icons";
-// Adicionados hooks nativos para garantir o recebimento dos parâmetros
 import {
   useFocusEffect,
   useNavigation,
   useRoute,
 } from "@react-navigation/native";
+import { Audio } from "expo-av";
+import * as Speech from "expo-speech";
 import React, {
   useCallback,
   useEffect,
@@ -52,7 +53,7 @@ const SYSTEM_INSTRUCTION =
   "Seu objetivo é ajudar o usuário a encontrar equilíbrio e autoconhecimento. " +
   "Responda sempre com empatia, usando uma linguagem acolhedora e levemente esotérica. " +
   "Ao sugerir conselhos, baseie-se em trânsitos planetários gerais, propriedades de pedras ou arquétipos do tarot. " +
-  "Responda sempre em português.";
+  "Responda sempre em Português do Brasil.";
 
 const STARTER_QUESTIONS = [
   "🔮 Qual a energia de hoje?",
@@ -70,32 +71,80 @@ export default function ChatScreen() {
     getChatModel,
   } = useChat();
 
-  // Hooks de navegação nativa
   const route = useRoute();
   const navigation = useNavigation();
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [maleVoiceId, setMaleVoiceId] = useState<string | null>(null); // ID da voz masculina
+
   const flatListRef = useRef<FlatList>(null);
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
 
-  // --- CORREÇÃO: Captura de parâmetros robusta ---
-  // Usa useFocusEffect para garantir que rode sempre que a tela ganhar foco
+  // 1. Configura Áudio para funcionar no Silencioso
+  useEffect(() => {
+    const configureAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+      } catch (error) {
+        console.log("Erro ao configurar áudio:", error);
+      }
+    };
+    configureAudio();
+  }, []);
+
+  // 2. Busca Voz Masculina (Joaquim ou similar)
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        const voices = await Speech.getAvailableVoicesAsync();
+
+        // Tenta achar "Joaquim" (Padrão iOS PT-PT)
+        const joaquim = voices.find(
+          (v) => v.name === "Joaquim" && v.language.includes("pt-PT")
+        );
+
+        if (joaquim) {
+          setMaleVoiceId(joaquim.identifier);
+        } else {
+          // Tenta qualquer voz com "Male" no identificador ou nome para PT
+          const anyMale = voices.find(
+            (v) =>
+              v.language.includes("pt") &&
+              (v.identifier.toLowerCase().includes("male") ||
+                v.name.toLowerCase().includes("male"))
+          );
+          if (anyMale) setMaleVoiceId(anyMale.identifier);
+        }
+      } catch (e) {
+        console.log("Erro ao buscar vozes", e);
+      }
+    };
+    fetchVoices();
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       const params = route.params as { initialPrompt?: string } | undefined;
 
       if (params?.initialPrompt) {
         setInput(params.initialPrompt);
-
-        // Limpa os parâmetros para não preencher de novo se o usuário sair e voltar sem intenção
         navigation.setParams({ initialPrompt: undefined } as any);
       }
+
+      return () => {
+        Speech.stop();
+        setSpeakingText(null);
+      };
     }, [route.params, navigation])
   );
-  // -----------------------------------------------
 
   const messages = useMemo(
     () => selectedConversation?.messages ?? [],
@@ -103,9 +152,7 @@ export default function ChatScreen() {
   );
   const canSendMessage = input.trim().length > 0 && !loading;
 
-  // Limpa o input quando troca de conversa (mas não quando vem de outra aba com prompt)
   useEffect(() => {
-    // Só limpa se NÃO tiver acabado de receber um prompt via rota
     const params = route.params as { initialPrompt?: string } | undefined;
     if (!params?.initialPrompt) {
       setInput("");
@@ -121,6 +168,31 @@ export default function ChatScreen() {
       );
     }
   }, [messages]);
+
+  const handleSpeak = async (text: string) => {
+    const isSpeaking = await Speech.isSpeakingAsync();
+
+    if (isSpeaking && speakingText === text) {
+      Speech.stop();
+      setSpeakingText(null);
+    } else {
+      Speech.stop();
+      setSpeakingText(text);
+
+      // Se achou voz masculina nativa, usa pitch normal. Se não, usa pitch grave (0.75) para simular.
+      const pitch = maleVoiceId ? 1.0 : 0.75;
+
+      Speech.speak(text, {
+        language: "pt-PT",
+        voice: maleVoiceId || undefined,
+        pitch: pitch,
+        rate: 0.9,
+        onDone: () => setSpeakingText(null),
+        onStopped: () => setSpeakingText(null),
+        onError: () => setSpeakingText(null),
+      });
+    }
+  };
 
   const parseSuggestedQuestions = (raw: string): string[] => {
     if (!raw) return [];
@@ -189,6 +261,9 @@ Follow-up suggestions (JSON array only):`,
       Alert.alert("Erro", "Não foi possível conectar ao Oráculo.");
       return;
     }
+
+    Speech.stop();
+    setSpeakingText(null);
 
     const trimmedInput = textToSend.trim();
     const conversationId = selectedConversation.id;
@@ -314,13 +389,33 @@ Follow-up suggestions (JSON array only):`,
               ]}
             >
               {item.role === "model" && (
-                <MaterialIcons
-                  name="auto-awesome"
-                  size={16}
-                  color={themeColors.accent}
-                  style={{ marginBottom: 5 }}
-                />
+                <View style={styles.modelHeader}>
+                  <MaterialIcons
+                    name="auto-awesome"
+                    size={16}
+                    color={themeColors.accent}
+                  />
+                  <TouchableOpacity
+                    onPress={() => handleSpeak(item.parts[0].text)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons
+                      name={
+                        speakingText === item.parts[0].text
+                          ? "stop-circle"
+                          : "volume-up"
+                      }
+                      size={20}
+                      color={
+                        speakingText === item.parts[0].text
+                          ? themeColors.destructive
+                          : themeColors.icon
+                      }
+                    />
+                  </TouchableOpacity>
+                </View>
               )}
+
               <Markdown
                 style={{
                   body: {
@@ -386,7 +481,6 @@ Follow-up suggestions (JSON array only):`,
           }
         />
 
-        {/* Área de Sugestões (Follow-up) */}
         {suggestedQuestions.length > 0 && !loading && (
           <View style={styles.suggestionsWrapper}>
             <ThemedText style={styles.suggestionLabel}>Sugestões:</ThemedText>
@@ -423,7 +517,6 @@ Follow-up suggestions (JSON array only):`,
           </View>
         )}
 
-        {/* Input Bar */}
         <View
           style={[
             styles.inputAreaContainer,
@@ -450,7 +543,6 @@ Follow-up suggestions (JSON array only):`,
               placeholderTextColor={themeColors.icon + "80"}
               editable={!loading}
               multiline
-              // maxHeight removido daqui, tratado no style
             />
             <TouchableOpacity
               onPress={() => handleSendMessage()}
@@ -501,7 +593,6 @@ const styles = StyleSheet.create({
   },
   messagesListEmpty: { justifyContent: "center", alignItems: "center" },
 
-  // Empty State Styles
   listEmpty: { alignItems: "center", padding: 30, marginTop: 20 },
   iconCircle: {
     width: 120,
@@ -533,7 +624,6 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
 
-  // Message Bubbles
   messageContainer: {
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -544,7 +634,16 @@ const styles = StyleSheet.create({
   userMessageContainer: { alignSelf: "flex-end", borderBottomRightRadius: 4 },
   modelMessageContainer: { alignSelf: "flex-start", borderBottomLeftRadius: 4 },
 
-  // Suggestions Area
+  modelHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128,128,128,0.2)",
+  },
+
   suggestionsWrapper: { paddingVertical: 10, paddingLeft: 16 },
   suggestionLabel: {
     fontSize: 12,
@@ -563,7 +662,6 @@ const styles = StyleSheet.create({
   },
   suggestionText: { fontSize: 13, marginLeft: 6 },
 
-  // Input Area
   inputAreaContainer: {
     paddingHorizontal: 16,
     paddingVertical: 10,
