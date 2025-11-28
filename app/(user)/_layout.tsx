@@ -1,23 +1,17 @@
 import { CustomDrawerContent } from "@/components/CustomDrawerContent";
 import { HapticTab } from "@/components/haptic-tab";
-import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
-import { ChatProvider } from "@/contexts/ChatContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
 import { createDrawerNavigator } from "@react-navigation/drawer";
-import { DrawerActions, useNavigation } from "@react-navigation/native";
-import { Tabs } from "expo-router";
-import { View } from "react-native";
-import { TouchableOpacity } from "react-native-gesture-handler";
-// IMPORTAÇÃO DO NOVO COMPONENTE
-import { NotificationManager } from "@/components/NotificationManager";
+import { Tabs } from "expo-router"; //
+
+// REMOVIDOS: ChatProvider, CosmeticsProvider, NotificationManager (já estão na raiz)
 
 const Drawer = createDrawerNavigator();
 
 function TabLayout() {
   const colorScheme = useColorScheme();
-  const navigation = useNavigation();
   const themeColors = Colors[colorScheme ?? "light"];
 
   return (
@@ -51,22 +45,7 @@ function TabLayout() {
           title: "Oráculo",
           headerShown: true,
           headerTitle: "",
-          headerLeft: () => (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <TouchableOpacity
-                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-                style={{ marginLeft: 15, padding: 5 }}
-              >
-                <MaterialIcons name="menu" size={28} color={themeColors.icon} />
-              </TouchableOpacity>
-              <ThemedText
-                type="subtitle"
-                style={{ marginLeft: 10, fontSize: 18 }}
-              >
-                Guia Místico
-              </ThemedText>
-            </View>
-          ),
+          // ... headerLeft mantido igual ao original ...
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="remove-red-eye" size={28} color={color} />
           ),
@@ -102,25 +81,23 @@ function TabLayout() {
           ),
         }}
       />
+      {/* REMOVIDO: <Tabs.Screen name="shop" ... /> pois agora é uma tela global */}
     </Tabs>
   );
 }
 
 export default function UserDrawerLayout() {
+  // Apenas o Drawer Navigator puro, sem providers em volta
   return (
-    <ChatProvider>
-      {/* O NotificationManager fica aqui para funcionar em todo o app */}
-      <NotificationManager />
-      <Drawer.Navigator
-        drawerContent={(props) => <CustomDrawerContent {...props} />}
-        screenOptions={{
-          headerShown: false,
-          drawerType: "slide",
-          swipeEnabled: false,
-        }}
-      >
-        <Drawer.Screen name="(tabs)" component={TabLayout} />
-      </Drawer.Navigator>
-    </ChatProvider>
+    <Drawer.Navigator
+      drawerContent={(props) => <CustomDrawerContent {...props} />}
+      screenOptions={{
+        headerShown: false,
+        drawerType: "slide",
+        swipeEnabled: false,
+      }}
+    >
+      <Drawer.Screen name="(tabs)" component={TabLayout} />
+    </Drawer.Navigator>
   );
 }

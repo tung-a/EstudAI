@@ -6,6 +6,7 @@ import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { getAstralSynergy, SynergyResult, ZodiacImages } from "@/lib/astrology";
 import { MaterialIcons as MaterialIconsOrigin } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
   addDoc,
@@ -30,6 +31,7 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
+  Text, // <--- ADICIONADO AQUI
   TextInput,
   TouchableOpacity,
   View,
@@ -62,6 +64,7 @@ const INTENTIONS = [
 ];
 
 export default function AccountScreen() {
+  const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,36 +118,13 @@ export default function AccountScreen() {
       );
 
       const unsubscribeFriends = onSnapshot(qFriends, async (snapshot) => {
-        // 1. Mapeamos primeiro para dados básicos para evitar erros de tipagem imediatos
-        const basicFriends = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Friend)
-        );
-
-        // 2. Atualizamos o estado imediatamente com o básico para a UI não ficar vazia
-        // (Isso ajuda a evitar o crash se a hidratação demorar ou falhar)
-
-        // 3. Iniciamos a hidratação (busca de dados profundos)
-        const hydratedPromises = snapshot.docs.map(
+        const promises = snapshot.docs.map(
           async (friendDoc): Promise<Friend> => {
             const friendData = friendDoc.data() as Omit<Friend, "id">;
             const friendId = friendData.friendId;
 
-            // Fallback seguro
-            const safeFriend: Friend = {
-              id: friendDoc.id,
-              name: friendData.name || "Viajante", // Garante que sempre tenha nome
-              email: friendData.email || "",
-              friendId: friendData.friendId,
-              zodiacSign: friendData.zodiacSign,
-              ...friendData,
-            };
-
-            if (!friendId) return safeFriend;
-
             try {
-              const userRef = doc(db, "users", friendId);
-              const userSnap = await getDoc(userRef);
-
+              const userSnap = await getDoc(doc(db, "users", friendId));
               if (userSnap.exists()) {
                 const userData = userSnap.data();
                 const today = new Date().toISOString().split("T")[0];
@@ -159,34 +139,28 @@ export default function AccountScreen() {
                   try {
                     astralMap = JSON.parse(userData.astralMapJson);
                   } catch (e) {
-                    console.error("JSON parse error", e);
+                    console.error("Erro parseando mapa", e);
                   }
                 }
 
                 return {
-                  ...safeFriend,
-                  zodiacSign: userData.zodiacSign || safeFriend.zodiacSign,
-                  name: userData.name || safeFriend.name, // Atualiza nome se mudou
+                  id: friendDoc.id,
+                  ...friendData,
+                  zodiacSign: userData.zodiacSign || friendData.zodiacSign,
                   dailyTarot,
                   astralMap,
-                };
+                } as Friend;
               }
             } catch (e) {
-              // Erro silencioso na hidratação, retorna o dado básico
-              // console.log("Hidratação falhou para", friendId);
+              console.log("Erro hidratando", e);
             }
 
-            return safeFriend;
+            return { id: friendDoc.id, ...friendData } as Friend;
           }
         );
 
-        try {
-          const finalFriends = await Promise.all(hydratedPromises);
-          setFriends(finalFriends);
-        } catch (err) {
-          // Se falhar tudo, usa o básico
-          setFriends(basicFriends);
-        }
+        const hydratedFriends = await Promise.all(promises);
+        setFriends(hydratedFriends);
       });
 
       return () => {
@@ -293,8 +267,6 @@ export default function AccountScreen() {
   };
 
   const handleCheckSynergy = (friend: Friend) => {
-    if (!friend) return; // Proteção extra
-
     if (!userData?.zodiacSign || !friend.zodiacSign) {
       Alert.alert(
         "Mapa Incompleto",
@@ -303,11 +275,7 @@ export default function AccountScreen() {
       return;
     }
     const result = getAstralSynergy(userData.zodiacSign, friend.zodiacSign);
-
-    setSynergyData({
-      friend: friend,
-      result,
-    });
+    setSynergyData({ friend: friend, result });
     setSynergyModalVisible(true);
   };
 
@@ -329,16 +297,12 @@ export default function AccountScreen() {
           read: false,
         }
       );
-
-      // Proteção ao acessar o nome para o alerta
-      const friendName = synergyData.friend.name
-        ? synergyData.friend.name.split(" ")[0]
-        : "Amigo";
       Alert.alert(
         "Energia Enviada",
-        `Você enviou vibrações de ${intention.label} para ${friendName}. ✨`
+        `Você enviou vibrações de ${intention.label} para ${
+          synergyData.friend.name.split(" ")[0]
+        }. ✨`
       );
-
       setSynergyModalVisible(false);
     } catch (error) {
       Alert.alert("Erro", "A energia se dissipou no caminho.");
@@ -357,12 +321,6 @@ export default function AccountScreen() {
   const getPlanetInfo = (map: any[], planetName: string) => {
     if (!map || !Array.isArray(map)) return null;
     return map.find((p) => p.planet === planetName);
-  };
-
-  // Renderização segura do nome do amigo no modal
-  const renderFriendName = () => {
-    if (!synergyData?.friend?.name) return "Amigo";
-    return synergyData.friend.name.split(" ")[0];
   };
 
   if (loading)
@@ -398,7 +356,7 @@ export default function AccountScreen() {
               )}
             </View>
             <ThemedText type="title" style={styles.userName}>
-              {userData?.name || "Viajante"}
+              {userData?.name}
             </ThemedText>
             <ThemedText style={styles.userEmail}>{userData?.email}</ThemedText>
             {userData?.zodiacSign && (
@@ -421,6 +379,34 @@ export default function AccountScreen() {
               </View>
             )}
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.shopCard,
+              { backgroundColor: themeColors.card, borderColor: "#FFD700" },
+            ]}
+            onPress={() => router.push("/shop")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.shopCardContent}>
+              <View>
+                <ThemedText type="subtitle" style={{ color: themeColors.text }}>
+                  Mercado Astral
+                </ThemedText>
+                <ThemedText
+                  style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}
+                >
+                  Personalize seu grimório e cartas.
+                </ThemedText>
+              </View>
+              <View style={styles.shopIconContainer}>
+                <MaterialIcons name="storefront" size={28} color="#FFD700" />
+              </View>
+            </View>
+            <View style={[styles.newBadge, { backgroundColor: "#FFD700" }]}>
+              <Text style={styles.newBadgeText}>NOVO</Text>
+            </View>
+          </TouchableOpacity>
 
           <View
             style={[styles.sectionCard, { backgroundColor: themeColors.card }]}
@@ -592,203 +578,9 @@ export default function AccountScreen() {
               Sair da Conta
             </ThemedText>
           </TouchableOpacity>
-          <ThemedText style={styles.versionText}>Astrum v1.5.0</ThemedText>
+          <ThemedText style={styles.versionText}>Astrum v1.6.0</ThemedText>
         </ScrollView>
       </SafeAreaView>
-
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={synergyModalVisible}
-        onRequestClose={() => setSynergyModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <ThemedView
-            style={[
-              styles.modalContent,
-              { backgroundColor: themeColors.card, padding: 24 },
-            ]}
-          >
-            {synergyData && (
-              <>
-                <View style={{ alignItems: "center", marginBottom: 15 }}>
-                  <MaterialIcons
-                    name="auto-awesome"
-                    size={40}
-                    color={themeColors.accent}
-                  />
-                  {/* CORREÇÃO DO CRASH: Usando função segura para renderizar nome */}
-                  <ThemedText type="subtitle" style={{ marginTop: 10 }}>
-                    {renderFriendName()}
-                  </ThemedText>
-                  <ThemedText style={{ opacity: 0.6, fontSize: 12 }}>
-                    Perfil Astral
-                  </ThemedText>
-                </View>
-
-                {synergyData.friend.astralMap ? (
-                  <View style={styles.triadContainer}>
-                    <View style={styles.triadItem}>
-                      <MaterialIcons
-                        name="wb-sunny"
-                        size={18}
-                        color="#FFD700"
-                      />
-                      <ThemedText style={styles.triadLabel}>Sol</ThemedText>
-                      <ThemedText style={styles.triadValue}>
-                        {getPlanetInfo(synergyData.friend.astralMap, "Sol")
-                          ?.sign || "-"}
-                      </ThemedText>
-                    </View>
-                    <View style={[styles.triadItem, styles.triadBorder]}>
-                      <MaterialIcons
-                        name="nights-stay"
-                        size={18}
-                        color="#B0BEC5"
-                      />
-                      <ThemedText style={styles.triadLabel}>Lua</ThemedText>
-                      <ThemedText style={styles.triadValue}>
-                        {getPlanetInfo(synergyData.friend.astralMap, "Lua")
-                          ?.sign || "-"}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.triadItem}>
-                      <MaterialIcons
-                        name="arrow-upward"
-                        size={18}
-                        color={themeColors.accent}
-                      />
-                      <ThemedText style={styles.triadLabel}>Asc</ThemedText>
-                      <ThemedText style={styles.triadValue}>
-                        {getPlanetInfo(
-                          synergyData.friend.astralMap,
-                          "Ascendente"
-                        )?.sign || "-"}
-                      </ThemedText>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.triadEmpty}>
-                    <ThemedText
-                      style={{
-                        fontSize: 12,
-                        opacity: 0.6,
-                        fontStyle: "italic",
-                      }}
-                    >
-                      Mapa astral não revelado.
-                    </ThemedText>
-                  </View>
-                )}
-
-                <View
-                  style={[
-                    styles.synergyCard,
-                    { borderColor: themeColors.accent + "40", marginTop: 15 },
-                  ]}
-                >
-                  <View style={styles.elementsRow}>
-                    <View style={styles.elementBadge}>
-                      <ThemedText style={styles.elementText}>
-                        {synergyData.result.elementA}
-                      </ThemedText>
-                    </View>
-                    <MaterialIcons
-                      name="sync-alt"
-                      size={20}
-                      color={themeColors.icon}
-                    />
-                    <View style={styles.elementBadge}>
-                      <ThemedText style={styles.elementText}>
-                        {synergyData.result.elementB}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <ThemedText
-                    type="defaultSemiBold"
-                    style={{
-                      textAlign: "center",
-                      marginBottom: 4,
-                      color: themeColors.accent,
-                    }}
-                  >
-                    {synergyData.result.title}
-                  </ThemedText>
-                  <ThemedText
-                    style={{
-                      textAlign: "center",
-                      fontSize: 13,
-                      lineHeight: 18,
-                    }}
-                  >
-                    {synergyData.result.description}
-                  </ThemedText>
-                </View>
-
-                <View style={styles.intentionsContainer}>
-                  <ThemedText
-                    type="defaultSemiBold"
-                    style={styles.intentionsTitle}
-                  >
-                    Enviar Vibração
-                  </ThemedText>
-                  <View style={styles.intentionsRow}>
-                    {INTENTIONS.map((intention) => (
-                      <TouchableOpacity
-                        key={intention.id}
-                        style={[
-                          styles.intentionButton,
-                          {
-                            backgroundColor: intention.color + "15",
-                            borderColor: intention.color + "40",
-                          },
-                        ]}
-                        onPress={() => handleSendIntention(intention)}
-                        disabled={sendingIntention !== null}
-                      >
-                        {sendingIntention === intention.id ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={intention.color}
-                          />
-                        ) : (
-                          <>
-                            <MaterialIcons
-                              name={intention.icon}
-                              size={20}
-                              color={intention.color}
-                            />
-                            <ThemedText
-                              style={[
-                                styles.intentionLabel,
-                                { color: intention.color },
-                              ]}
-                            >
-                              {intention.label}
-                            </ThemedText>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={[
-                    styles.searchButton,
-                    { backgroundColor: themeColors.accent, marginTop: 15 },
-                  ]}
-                  onPress={() => setSynergyModalVisible(false)}
-                >
-                  <ThemedText style={{ color: "#FFF", fontWeight: "bold" }}>
-                    Fechar
-                  </ThemedText>
-                </TouchableOpacity>
-              </>
-            )}
-          </ThemedView>
-        </View>
-      </Modal>
 
       <Modal
         animationType="fade"
@@ -908,7 +700,216 @@ export default function AccountScreen() {
           </ThemedView>
         </View>
       </Modal>
-      {/* Modais de Config (Notificações/Privacidade) mantidos iguais */}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={synergyModalVisible}
+        onRequestClose={() => setSynergyModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <ThemedView
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.card, padding: 24 },
+            ]}
+          >
+            {synergyData && (
+              <>
+                <View style={{ alignItems: "center", marginBottom: 15 }}>
+                  <MaterialIcons
+                    name="auto-awesome"
+                    size={40}
+                    color={themeColors.accent}
+                  />
+                  <ThemedText type="subtitle" style={{ marginTop: 10 }}>
+                    {synergyData.friend.name
+                      ? synergyData.friend.name.split(" ")[0]
+                      : "Amigo"}
+                  </ThemedText>
+                  <ThemedText style={{ opacity: 0.6, fontSize: 12 }}>
+                    Perfil Astral
+                  </ThemedText>
+                </View>
+
+                {synergyData.friend.astralMap ? (
+                  <View style={styles.triadContainer}>
+                    <View style={styles.triadItem}>
+                      <MaterialIcons
+                        name="wb-sunny"
+                        size={18}
+                        color="#FFD700"
+                      />
+                      <ThemedText style={styles.triadLabel}>Sol</ThemedText>
+                      <ThemedText style={styles.triadValue}>
+                        {getPlanetInfo(synergyData.friend.astralMap, "Sol")
+                          ?.sign || "-"}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.triadItem, styles.triadBorder]}>
+                      <MaterialIcons
+                        name="nights-stay"
+                        size={18}
+                        color="#B0BEC5"
+                      />
+                      <ThemedText style={styles.triadLabel}>Lua</ThemedText>
+                      <ThemedText style={styles.triadValue}>
+                        {getPlanetInfo(synergyData.friend.astralMap, "Lua")
+                          ?.sign || "-"}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.triadItem}>
+                      <MaterialIcons
+                        name="arrow-upward"
+                        size={18}
+                        color={themeColors.accent}
+                      />
+                      <ThemedText style={styles.triadLabel}>Asc</ThemedText>
+                      <ThemedText style={styles.triadValue}>
+                        {getPlanetInfo(
+                          synergyData.friend.astralMap,
+                          "Ascendente"
+                        )?.sign || "-"}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.triadEmpty}>
+                    <ThemedText
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.6,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Mapa astral não revelado.
+                    </ThemedText>
+                  </View>
+                )}
+
+                <View
+                  style={[
+                    styles.synergyCard,
+                    { borderColor: themeColors.accent + "40", marginTop: 15 },
+                  ]}
+                >
+                  <View style={styles.elementsRow}>
+                    <View style={styles.elementBadge}>
+                      <ThemedText style={styles.elementText}>
+                        {synergyData.result.elementA}
+                      </ThemedText>
+                    </View>
+                    <MaterialIcons
+                      name="sync-alt"
+                      size={20}
+                      color={themeColors.icon}
+                    />
+                    <View style={styles.elementBadge}>
+                      <ThemedText style={styles.elementText}>
+                        {synergyData.result.elementB}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText
+                    type="defaultSemiBold"
+                    style={{
+                      textAlign: "center",
+                      marginBottom: 4,
+                      color: themeColors.accent,
+                    }}
+                  >
+                    {synergyData.result.title}
+                  </ThemedText>
+                  <ThemedText
+                    style={{
+                      textAlign: "center",
+                      fontSize: 13,
+                      lineHeight: 18,
+                    }}
+                  >
+                    {synergyData.result.description}
+                  </ThemedText>
+                  <View style={styles.scoreContainer}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <MaterialIcons
+                        key={star}
+                        name={
+                          star <= synergyData.result.score
+                            ? "star"
+                            : "star-border"
+                        }
+                        size={24}
+                        color={Colors.light.tint}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.intentionsContainer}>
+                  <ThemedText
+                    type="defaultSemiBold"
+                    style={styles.intentionsTitle}
+                  >
+                    Enviar Vibração
+                  </ThemedText>
+                  <View style={styles.intentionsRow}>
+                    {INTENTIONS.map((intention) => (
+                      <TouchableOpacity
+                        key={intention.id}
+                        style={[
+                          styles.intentionButton,
+                          {
+                            backgroundColor: intention.color + "15",
+                            borderColor: intention.color + "40",
+                          },
+                        ]}
+                        onPress={() => handleSendIntention(intention)}
+                        disabled={sendingIntention !== null}
+                      >
+                        {sendingIntention === intention.id ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={intention.color}
+                          />
+                        ) : (
+                          <>
+                            <MaterialIcons
+                              name={intention.icon}
+                              size={20}
+                              color={intention.color}
+                            />
+                            <ThemedText
+                              style={[
+                                styles.intentionLabel,
+                                { color: intention.color },
+                              ]}
+                            >
+                              {intention.label}
+                            </ThemedText>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.searchButton,
+                    { backgroundColor: themeColors.accent, marginTop: 15 },
+                  ]}
+                  onPress={() => setSynergyModalVisible(false)}
+                >
+                  <ThemedText style={{ color: "#FFF", fontWeight: "bold" }}>
+                    Fechar
+                  </ThemedText>
+                </TouchableOpacity>
+              </>
+            )}
+          </ThemedView>
+        </View>
+      </Modal>
+
       <Modal
         animationType="slide"
         transparent={true}
@@ -1071,6 +1072,42 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   signText: { fontWeight: "600", fontSize: 14 },
+
+  // Shop Card
+  shopCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  shopCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  shopIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 215, 0, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  newBadge: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderBottomLeftRadius: 8,
+  },
+  newBadgeText: { fontSize: 10, fontWeight: "bold", color: "#000" },
+
   sectionCard: {
     borderRadius: 16,
     padding: 16,

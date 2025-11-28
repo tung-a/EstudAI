@@ -32,8 +32,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-// IMPORTAÇÃO DO NOVO COMPONENTE
+
 import { MeditationModal } from "@/components/MeditationModal";
+import { useCosmetics } from "@/contexts/CosmeticsContext";
+import { LinearGradient } from "expo-linear-gradient";
 
 type Event = {
   id: string;
@@ -67,6 +69,7 @@ const MAJOR_ARCANA = [
   "O Mundo",
 ];
 
+// --- COMPONENTE: CARTA DE ESCOLHA (VERSO) ---
 const TarotCardOption = ({
   onPress,
   disabled,
@@ -74,6 +77,7 @@ const TarotCardOption = ({
   isInactive,
   stackOrder,
   accessibilityLabel,
+  skinStyle,
 }: {
   onPress: () => void;
   disabled: boolean;
@@ -81,6 +85,7 @@ const TarotCardOption = ({
   isInactive: boolean;
   stackOrder: number;
   accessibilityLabel: string;
+  skinStyle: any;
 }) => (
   <TouchableOpacity
     onPress={onPress}
@@ -90,12 +95,28 @@ const TarotCardOption = ({
     accessibilityLabel={accessibilityLabel}
   >
     <Animated.View
-      style={[styles.tarotCardOption, animatedStyle, { zIndex: stackOrder }]}
+      style={[
+        styles.tarotCardOption,
+        animatedStyle,
+        {
+          zIndex: stackOrder,
+          borderColor: skinStyle.borderColor,
+          backgroundColor: "transparent",
+          overflow: "hidden",
+        },
+      ]}
     >
+      {/* SKIN DA CARTA (VERSO) */}
+      <LinearGradient
+        colors={skinStyle.colors}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       <MaterialIcons
         name="auto-awesome"
         size={32}
-        color="rgba(255,255,255,0.3)"
+        color={skinStyle.iconColor}
       />
     </Animated.View>
   </TouchableOpacity>
@@ -109,9 +130,21 @@ if (
 }
 
 export default function HomeScreen() {
+  // --- HOOKS ---
+  const { getChatModel } = useChat();
+  const { currentSkinStyle } = useCosmetics(); // Pegando a skin equipada
+  const navigation = useNavigation<any>();
+  const colorScheme = useColorScheme() ?? "light";
+  const themeColors = Colors[colorScheme];
+
+  // --- ESTADOS ---
   const [user, setUser] = useState<User | null>(null);
   const [userSign, setUserSign] = useState<string>("");
+
+  // --- ESTADOS DE AGENDA (Loading Separado) ---
   const [todaysEvents, setTodaysEvents] = useState<Event[]>([]);
+  const [agendaLoading, setAgendaLoading] = useState(true);
+
   const [loading, setLoading] = useState(true);
 
   const [horoscope, setHoroscope] = useState<string | null>(null);
@@ -124,8 +157,6 @@ export default function HomeScreen() {
 
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [deckModalVisible, setDeckModalVisible] = useState(false);
-
-  // NOVO ESTADO PARA MEDITAÇÃO
   const [meditationVisible, setMeditationVisible] = useState(false);
 
   const [modalContent, setModalContent] = useState<{
@@ -140,6 +171,7 @@ export default function HomeScreen() {
     type: "horoscope",
   });
 
+  // --- ANIMAÇÕES DO TAROT ---
   const [isChoosing, setIsChoosing] = useState(false);
   const [cardRevealAnim] = useState(new Animated.Value(0));
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
@@ -238,15 +270,12 @@ export default function HomeScreen() {
     }
   }, [deckModalVisible, tarotCard, playEntranceSequence]);
 
-  const { getChatModel } = useChat();
-  const navigation = useNavigation<any>();
-  const colorScheme = useColorScheme() ?? "light";
-  const themeColors = Colors[colorScheme];
-
   const getTodayKey = () => {
     const d = new Date();
     return d.toISOString().split("T")[0];
   };
+
+  // --- EFEITOS DE DADOS ---
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -305,6 +334,8 @@ export default function HomeScreen() {
       generateHoroscope();
     }
   }, [user, userSign]);
+
+  // --- HANDLERS TAROT ---
 
   const openTarotDeck = () => {
     if (tarotCard) {
@@ -391,29 +422,41 @@ export default function HomeScreen() {
     }, 200);
   };
 
+  // --- HANDLERS AGENDA (CORRIGIDO) ---
   useEffect(() => {
-    if (user) {
-      const today = new Date();
-      const todayString = new Date(
-        today.getTime() - today.getTimezoneOffset() * 60000
-      )
-        .toISOString()
-        .split("T")[0];
-      const eventsQuery = query(
-        collection(db, "users", user.uid, "events"),
-        where("date", "==", todayString)
-      );
-      const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
+    if (!user) {
+      setAgendaLoading(false);
+      return;
+    }
+
+    const today = new Date();
+    const offset = today.getTimezoneOffset() * 60000;
+    const todayString = new Date(today.getTime() - offset)
+      .toISOString()
+      .split("T")[0];
+
+    const eventsQuery = query(
+      collection(db, "users", user.uid, "events"),
+      where("date", "==", todayString)
+    );
+
+    const unsubscribeEvents = onSnapshot(
+      eventsQuery,
+      (snapshot) => {
         const events: Event[] = [];
         snapshot.forEach((doc) =>
           events.push({ id: doc.id, ...doc.data() } as Event)
         );
         events.sort((a, b) => a.time.localeCompare(b.time));
         setTodaysEvents(events);
-        setLoading(false);
-      });
-      return () => unsubscribeEvents();
-    }
+        setAgendaLoading(false);
+      },
+      (error) => {
+        console.error("Erro agenda:", error);
+        setAgendaLoading(false);
+      }
+    );
+    return () => unsubscribeEvents();
   }, [user]);
 
   const userName = user?.displayName?.split(" ")[0] || "Viajante";
@@ -431,6 +474,11 @@ export default function HomeScreen() {
   const frontAnimatedStyle = {
     transform: [{ perspective: 1000 }, { rotateY: frontInterpolate }],
   };
+
+  // CORREÇÃO: Texto da carta deve ser branco (ou cor da skin)
+  // para garantir contraste sobre o gradiente da skin
+  const cardFrontTitleColor = currentSkinStyle.iconColor;
+  const cardFrontTextColor = "#FFFFFF";
 
   return (
     <ThemedView style={styles.container}>
@@ -493,67 +541,133 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Tarot do Dia */}
+            {/* Tarot do Dia (COM CORREÇÃO DE SKIN E TEXTO) */}
             <TouchableOpacity
               style={[
                 styles.gridCard,
                 styles.tarotCardTouchable,
+                // Removemos padding e borda para o gradiente preencher
                 tarotCard
                   ? {
-                      backgroundColor: themeColors.card,
-                      borderColor: themeColors.accent,
-                      borderWidth: 0.5,
+                      borderWidth: 0,
+                      backgroundColor: "transparent",
+                      padding: 0,
                     }
                   : {
-                      backgroundColor: themeColors.accent,
-                      borderColor: "rgba(255,255,255,0.3)",
-                      borderWidth: 1,
+                      borderWidth: 0,
+                      backgroundColor: "transparent",
+                      padding: 0,
                     },
               ]}
               onPress={openTarotDeck}
               activeOpacity={0.9}
             >
-              {tarotCard ? (
-                <View style={styles.cardContent}>
-                  <MaterialIcons
-                    name="style"
-                    size={28}
-                    color={themeColors.accent}
-                    style={{ marginBottom: 8 }}
+              {/* Verso (Skin) */}
+              {!tarotCard && (
+                <View
+                  style={[
+                    styles.cardBackContent,
+                    {
+                      width: "100%",
+                      height: "100%",
+                      borderRadius: 16,
+                      overflow: "hidden",
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={currentSkinStyle.colors as [string, string]}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                   />
-                  <ThemedText
-                    style={[styles.tarotName, { color: themeColors.text }]}
+                  <View
+                    style={{
+                      alignItems: "center",
+                      justifyContent: "center",
+                      zIndex: 1,
+                      flex: 1,
+                    }}
                   >
-                    {tarotCard.name}
-                  </ThemedText>
-                  <ThemedText
-                    style={[styles.miniText, { textAlign: "center" }]}
-                    numberOfLines={3}
-                  >
-                    {tarotCard.meaning}
-                  </ThemedText>
-                  <ThemedText style={styles.readMore}>Ler completo</ThemedText>
+                    <MaterialIcons
+                      name="auto-awesome"
+                      size={40}
+                      color={currentSkinStyle.iconColor}
+                      style={{ marginBottom: 8 }}
+                    />
+                    <ThemedText style={styles.cardBackTitle}>
+                      Carta do Dia
+                    </ThemedText>
+                    <ThemedText style={styles.cardBackSubtitle}>
+                      Toque para escolher
+                    </ThemedText>
+                  </View>
                 </View>
-              ) : (
-                <View style={styles.cardBackContent}>
-                  <MaterialIcons
-                    name="auto-awesome"
-                    size={40}
-                    color="#FFF"
-                    style={{ opacity: 0.9, marginBottom: 8 }}
+              )}
+
+              {/* Frente (Revelado com Skin) */}
+              {tarotCard && (
+                <View
+                  style={{
+                    flex: 1,
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: 16,
+                    overflow: "hidden",
+                  }}
+                >
+                  {/* Fundo: Gradiente da Skin */}
+                  <LinearGradient
+                    colors={currentSkinStyle.colors as [string, string]}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                   />
-                  <ThemedText style={styles.cardBackTitle}>
-                    Carta do Dia
-                  </ThemedText>
-                  <ThemedText style={styles.cardBackSubtitle}>
-                    Toque para escolher
-                  </ThemedText>
+
+                  {/* Conteúdo com Sombra leve para contraste */}
+                  <View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      padding: 15,
+                      backgroundColor: "rgba(0,0,0,0.25)", // Sombra para garantir leitura
+                    }}
+                  >
+                    <MaterialIcons
+                      name="style"
+                      size={28}
+                      color={cardFrontTitleColor}
+                      style={{ marginBottom: 8 }}
+                    />
+                    <Text
+                      style={[styles.tarotName, { color: cardFrontTitleColor }]}
+                    >
+                      {tarotCard.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.miniText,
+                        { textAlign: "center", color: cardFrontTextColor },
+                      ]}
+                      numberOfLines={3}
+                    >
+                      {tarotCard.meaning}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.readMore,
+                        { color: cardFrontTitleColor, marginTop: 8 },
+                      ]}
+                    >
+                      Ler completo
+                    </Text>
+                  </View>
                 </View>
               )}
             </TouchableOpacity>
           </View>
 
-          {/* Agenda */}
           <ThemedView
             lightColor={Colors.light.card}
             darkColor={Colors.dark.card}
@@ -568,7 +682,7 @@ export default function HomeScreen() {
               />
               <ThemedText type="subtitle">Rituais de Hoje</ThemedText>
             </View>
-            {loading ? (
+            {agendaLoading ? (
               <ActivityIndicator
                 style={styles.loadingIndicator}
                 color={themeColors.accent}
@@ -678,7 +792,6 @@ export default function HomeScreen() {
                   Ver meu Mapa Astral
                 </ThemedText>
               </TouchableOpacity>
-              {/* NOVO BOTÃO DE MEDITAÇÃO */}
               <TouchableOpacity
                 style={[
                   styles.actionButton,
@@ -703,7 +816,7 @@ export default function HomeScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* MODAL MESA DE TAROT */}
+      {/* --- MODAL MESA DE TAROT (COM SKINS) --- */}
       <Modal
         visible={deckModalVisible}
         transparent
@@ -734,103 +847,145 @@ export default function HomeScreen() {
                 ? "O universo falou."
                 : "Escolha uma carta com sua intuição"}
             </Text>
+
             <View style={styles.cardsRow}>
               {!tarotCard ? (
-                [0, 1, 2].map((cardIndex) => (
-                  <TarotCardOption
-                    key={`tarot-card-${cardIndex}`}
-                    onPress={() => handleChooseCard(cardIndex)}
-                    disabled={isChoosing}
-                    isInactive={
-                      selectedCardIndex !== null &&
-                      selectedCardIndex !== cardIndex
-                    }
-                    stackOrder={
-                      selectedCardIndex === cardIndex ? 10 : cardIndex + 1
-                    }
-                    accessibilityLabel={`Carta ${cardIndex + 1}`}
-                    animatedStyle={{
-                      marginTop: cardIndex === 1 ? 0 : 20,
-                      transform: [
-                        {
-                          translateY: cardMotionValues[cardIndex].interpolate({
-                            inputRange: [-0.3, 0, 1, 2],
-                            outputRange: [-20, 0, 120, 400],
-                          }),
-                        },
-                        {
-                          scale: cardMotionValues[cardIndex].interpolate({
-                            inputRange: [-0.3, 0, 1, 2],
-                            outputRange: [1.05, 1, 0.95, 0.9],
-                          }),
-                        },
-                        {
-                          rotateZ: cardShakeValues[cardIndex].interpolate({
-                            inputRange: [-1, 0, 1],
-                            outputRange: ["-1.6deg", "0deg", "1.6deg"],
-                          }),
-                        },
-                        {
-                          rotate:
-                            cardIndex === 0
-                              ? "-5deg"
-                              : cardIndex === 2
-                              ? "5deg"
-                              : "0deg",
-                        },
-                      ],
-                      opacity: cardMotionValues[cardIndex].interpolate({
-                        inputRange: [0, 1.5, 2],
-                        outputRange: [1, 1, 0],
-                      }),
-                    }}
-                  />
-                ))
+                [0, 1, 2].map((cardIndex) => {
+                  const rotate =
+                    cardIndex === 0
+                      ? "-5deg"
+                      : cardIndex === 2
+                      ? "5deg"
+                      : "0deg";
+                  const marginTop = cardIndex === 1 ? 0 : 20;
+                  return (
+                    <TarotCardOption
+                      key={`tarot-card-${cardIndex}`}
+                      onPress={() => handleChooseCard(cardIndex)}
+                      disabled={isChoosing}
+                      isInactive={
+                        selectedCardIndex !== null &&
+                        selectedCardIndex !== cardIndex
+                      }
+                      stackOrder={
+                        selectedCardIndex === cardIndex ? 10 : cardIndex + 1
+                      }
+                      accessibilityLabel={`Carta ${cardIndex + 1}`}
+                      skinStyle={currentSkinStyle}
+                      animatedStyle={{
+                        marginTop,
+                        transform: [
+                          {
+                            translateY: cardMotionValues[cardIndex].interpolate(
+                              {
+                                inputRange: [-0.3, 0, 1, 2],
+                                outputRange: [-20, 0, 120, 400],
+                              }
+                            ),
+                          },
+                          {
+                            scale: cardMotionValues[cardIndex].interpolate({
+                              inputRange: [-0.3, 0, 1, 2],
+                              outputRange: [1.05, 1, 0.95, 0.9],
+                            }),
+                          },
+                          {
+                            rotateZ: cardShakeValues[cardIndex].interpolate({
+                              inputRange: [-1, 0, 1],
+                              outputRange: ["-1.6deg", "0deg", "1.6deg"],
+                            }),
+                          },
+                          { rotate },
+                        ],
+                        opacity: cardMotionValues[cardIndex].interpolate({
+                          inputRange: [0, 1.5, 2],
+                          outputRange: [1, 1, 0],
+                        }),
+                      }}
+                    />
+                  );
+                })
               ) : (
                 <View style={styles.flipContainer}>
+                  {/* Verso (Skin) */}
                   <Animated.View
                     style={[
                       styles.flipCard,
                       styles.flipCardBack,
                       backAnimatedStyle,
+                      {
+                        borderColor: currentSkinStyle.borderColor,
+                        borderWidth: 0,
+                        backgroundColor: "transparent",
+                      },
                     ]}
                   >
+                    <LinearGradient
+                      colors={currentSkinStyle.colors as [string, string]}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
                     <MaterialIcons
                       name="auto-awesome"
                       size={40}
-                      color="rgba(255,255,255,0.5)"
+                      color={currentSkinStyle.iconColor}
                     />
                   </Animated.View>
+
+                  {/* Frente (Skin preenchendo tudo) */}
                   <Animated.View
                     style={[
                       styles.flipCard,
                       styles.flipCardFront,
                       frontAnimatedStyle,
-                      { backgroundColor: themeColors.card },
+                      { padding: 0 },
                     ]}
                   >
-                    <MaterialIcons
-                      name="style"
-                      size={40}
-                      color={themeColors.accent}
-                      style={{ marginBottom: 15 }}
+                    <LinearGradient
+                      colors={currentSkinStyle.colors as [string, string]}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                     />
-                    <ThemedText
-                      type="subtitle"
+                    <View
                       style={{
-                        color: themeColors.accent,
-                        marginBottom: 10,
-                        textAlign: "center",
+                        flex: 1,
+                        width: "100%",
+                        height: "100%",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        padding: 20,
+                        backgroundColor: "rgba(0,0,0,0.25)",
                       }}
                     >
-                      {tarotCard.name}
-                    </ThemedText>
-                    <ThemedText
-                      style={{ textAlign: "center", paddingHorizontal: 10 }}
-                      numberOfLines={5}
-                    >
-                      {tarotCard.meaning}
-                    </ThemedText>
+                      <MaterialIcons
+                        name="style"
+                        size={40}
+                        color={cardFrontTitleColor}
+                        style={{ marginBottom: 15 }}
+                      />
+                      <ThemedText
+                        type="subtitle"
+                        style={{
+                          color: cardFrontTitleColor,
+                          marginBottom: 10,
+                          textAlign: "center",
+                        }}
+                      >
+                        {tarotCard.name}
+                      </ThemedText>
+                      <ThemedText
+                        style={{
+                          textAlign: "center",
+                          paddingHorizontal: 10,
+                          color: cardFrontTextColor,
+                        }}
+                        numberOfLines={5}
+                      >
+                        {tarotCard.meaning}
+                      </ThemedText>
+                    </View>
                   </Animated.View>
                 </View>
               )}
@@ -863,7 +1018,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Detalhes (Horóscopo/Tarot) */}
+      {/* Modal de Detalhes (COM SKIN APLICADA) */}
       <Modal
         visible={detailsModalVisible}
         transparent
@@ -871,9 +1026,30 @@ export default function HomeScreen() {
         onRequestClose={() => setDetailsModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <ThemedView
-            style={[styles.modalContent, { backgroundColor: themeColors.card }]}
+          {/* Usamos View comum + Gradiente */}
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: "transparent", overflow: "hidden" },
+            ]}
           >
+            {/* 1. Fundo: Gradiente da Skin */}
+            <LinearGradient
+              colors={currentSkinStyle.colors as [string, string]}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+
+            {/* 2. Overlay Escuro: Para garantir leitura */}
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: "rgba(0,0,0,0.65)" },
+              ]}
+            />
+
+            {/* 3. Conteúdo */}
             <View style={styles.modalHeader}>
               <View
                 style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
@@ -881,65 +1057,77 @@ export default function HomeScreen() {
                 <MaterialIcons
                   name={modalContent.icon}
                   size={24}
-                  color={themeColors.accent}
+                  color={currentSkinStyle.iconColor}
                 />
-                <ThemedText type="subtitle">{modalContent.title}</ThemedText>
+                <ThemedText type="subtitle" style={{ color: "#FFF" }}>
+                  {modalContent.title}
+                </ThemedText>
               </View>
               <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
                 <MaterialIcons
                   name="close"
                   size={24}
-                  color={themeColors.icon}
+                  color="rgba(255,255,255,0.7)"
                 />
               </TouchableOpacity>
             </View>
+
             <ScrollView style={styles.modalBody}>
-              <ThemedText style={styles.modalText}>
+              <Text style={[styles.modalText, { color: "#FFF", opacity: 0.9 }]}>
                 {modalContent.content}
-              </ThemedText>
+              </Text>
             </ScrollView>
+
             <View style={styles.modalActions}>
               {modalContent.type === "tarot" && (
                 <TouchableOpacity
                   style={[
                     styles.modalButtonSecondary,
-                    { borderColor: themeColors.accent },
+                    { borderColor: currentSkinStyle.iconColor },
                   ]}
                   onPress={handleDiscussWithOracle}
                 >
                   <MaterialIcons
                     name="chat"
                     size={18}
-                    color={themeColors.accent}
+                    color={currentSkinStyle.iconColor}
                     style={{ marginRight: 8 }}
                   />
-                  <ThemedText
+                  <Text
                     style={[
                       styles.modalButtonText,
-                      { color: themeColors.accent },
+                      { color: currentSkinStyle.iconColor },
                     ]}
                   >
                     Conversar
-                  </ThemedText>
+                  </Text>
                 </TouchableOpacity>
               )}
+
               <TouchableOpacity
                 style={[
                   styles.modalButton,
-                  { backgroundColor: themeColors.accent, flex: 1 },
+                  { backgroundColor: currentSkinStyle.iconColor, flex: 1 },
                 ]}
                 onPress={() => setDetailsModalVisible(false)}
               >
-                <Text style={[styles.modalButtonText, { color: "#FFF" }]}>
+                <Text
+                  style={[
+                    styles.modalButtonText,
+                    {
+                      color:
+                        currentSkinStyle.iconColor === "#FFF" ? "#000" : "#FFF",
+                    },
+                  ]}
+                >
                   Gratidão
                 </Text>
               </TouchableOpacity>
             </View>
-          </ThemedView>
+          </View>
         </View>
       </Modal>
 
-      {/* NOVO MODAL DE MEDITAÇÃO */}
       <MeditationModal
         visible={meditationVisible}
         onClose={() => setMeditationVisible(false)}
@@ -957,17 +1145,20 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 28 },
   headerSubtitle: { fontSize: 16, opacity: 0.7, marginTop: 6 },
   gridContainer: { flexDirection: "row", gap: 12, marginBottom: 24 },
+
+  // CORREÇÃO DA ALTURA DO CARD
   gridCard: {
     flex: 1,
     borderRadius: 16,
     padding: 15,
-    minHeight: 160,
+    height: 220,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
+
   cardLabel: { fontSize: 14, fontWeight: "bold", marginLeft: 6 },
   cardHeaderSmall: {
     flexDirection: "row",
@@ -982,15 +1173,32 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   tarotCardTouchable: { justifyContent: "center", alignItems: "center" },
-  cardBackContent: { alignItems: "center", justifyContent: "center" },
+  cardBackContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
+    overflow: "hidden",
+  },
   cardBackTitle: {
     color: "#FFF",
     fontWeight: "bold",
     fontSize: 15,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowRadius: 4,
   },
-  cardBackSubtitle: { color: "#FFF", fontSize: 11, opacity: 0.8, marginTop: 4 },
+  cardBackSubtitle: {
+    color: "#FFF",
+    fontSize: 11,
+    opacity: 0.9,
+    marginTop: 4,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowRadius: 4,
+  },
+
   cardContent: { alignItems: "center", width: "100%" },
   tarotName: {
     fontSize: 15,
@@ -1125,9 +1333,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 160,
     borderRadius: 12,
-    backgroundColor: "#5e35b1",
     borderWidth: 2,
-    borderColor: "#b39ddb",
     justifyContent: "center",
     alignItems: "center",
     marginHorizontal: -15,
@@ -1158,10 +1364,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 8,
   },
-  flipCardFront: {},
-  flipCardBack: {
-    backgroundColor: "#5e35b1",
-    borderColor: "#b39ddb",
-    borderWidth: 1,
-  },
+  flipCardFront: { backgroundColor: "transparent", overflow: "hidden" },
+  flipCardBack: { borderWidth: 1, overflow: "hidden" },
 });

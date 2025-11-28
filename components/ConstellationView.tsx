@@ -1,8 +1,10 @@
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
+import { useCosmetics } from "@/contexts/CosmeticsContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ZodiacImages, getAstralSynergy } from "@/lib/astrology";
 import { MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo } from "react";
 import {
   Dimensions,
@@ -30,7 +32,7 @@ const ORBIT_STEP = 45;
 
 type UserData = { name: string; zodiacSign?: string };
 
-// Definição completa do tipo Friend
+// Definição completa do tipo Friend para uso em outros arquivos
 export type Friend = {
   id: string;
   friendId: string;
@@ -94,9 +96,8 @@ const OrbitGroup = ({
     transform: [{ rotateZ: `${orbitRotation.value}rad` }],
   }));
 
-  // Lógica de Aura baseada na carta do dia
   const getAuraColor = (card?: string) => {
-    if (!card) return { color: themeColors.icon, width: 1 };
+    if (!card) return { color: themeColors.icon, width: 1, type: "neutral" };
 
     const expansion = [
       "O Sol",
@@ -118,13 +119,12 @@ const OrbitGroup = ({
       "Os Enamorados",
       "A Justiça",
     ];
-    // As demais caem no neutro/introspectivo (Prata)
 
     if (expansion.includes(card))
-      return { color: "#FFD700", width: 2, type: "expansion" }; // Ouro
+      return { color: "#FFD700", width: 2, type: "expansion" };
     if (challenge.includes(card))
-      return { color: "#FF5722", width: 2, type: "challenge" }; // Laranja
-    return { color: "#B0BEC5", width: 2, type: "introspection" }; // Prata
+      return { color: "#FF5722", width: 2, type: "challenge" };
+    return { color: "#B0BEC5", width: 2, type: "introspection" };
   };
 
   return (
@@ -135,8 +135,6 @@ const OrbitGroup = ({
       {friends.map((friend, index) => {
         const angleStep = (2 * Math.PI) / friends.length;
         const angle = index * angleStep;
-
-        // Posicionamento circular
         const x = radius * Math.cos(angle);
         const y = radius * Math.sin(angle);
         const size = score >= 4 ? 44 : 36;
@@ -172,7 +170,6 @@ const OrbitGroup = ({
                       : themeColors.icon,
                     borderWidth: hasAura ? 2 : score >= 5 ? 2 : 1,
                     backgroundColor: themeColors.background,
-                    // Efeito de brilho para aura de expansão
                     shadowColor:
                       aura.type === "expansion" ? aura.color : "#000",
                     shadowOpacity: aura.type === "expansion" ? 0.6 : 0.2,
@@ -195,7 +192,6 @@ const OrbitGroup = ({
                 )}
               </View>
 
-              {/* Ícone indicador de Aura */}
               {hasAura && (
                 <View
                   style={[styles.auraBadge, { backgroundColor: aura.color }]}
@@ -240,14 +236,13 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+  const { currentBackgroundStyle } = useCosmetics(); // Hook do Mercado para skins de fundo
 
-  // Rotação manual (Gesto)
   const gestureRotation = useSharedValue(0);
   const savedRotation = useSharedValue(0);
   const sunPulse = useSharedValue(1);
 
   useEffect(() => {
-    // Pulso do Sol
     sunPulse.value = withRepeat(
       withSequence(
         withTiming(1.1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
@@ -300,7 +295,6 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
     return groups;
   }, [user, friends]);
 
-  // Renderiza os anéis de fundo (Estáticos em relação à rotação automática)
   const renderOrbitRings = () => {
     return [1, 2, 3, 4, 5].map((i) => {
       const radius = 60 + (i - 1) * ORBIT_STEP;
@@ -326,7 +320,24 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
 
   return (
     <View style={[styles.container, { height: CONTAINER_SIZE + 40 }]}>
-      <ThemedText style={styles.hintText}>
+      {/* Fundo Cosmético (Mercado) */}
+      {currentBackgroundStyle.colors[0] !== "transparent" && (
+        <LinearGradient
+          colors={currentBackgroundStyle.colors as [string, string]}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      )}
+
+      <ThemedText
+        style={[
+          styles.hintText,
+          currentBackgroundStyle.textColor
+            ? { color: currentBackgroundStyle.textColor }
+            : {},
+        ]}
+      >
         Gire o cosmos para explorar
       </ThemedText>
 
@@ -337,19 +348,12 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
             { width: CONTAINER_SIZE, height: CONTAINER_SIZE },
           ]}
         >
-          {/* Camada controlada pelo Gesto */}
           <Animated.View style={[styles.layer, animatedGestureStyle]}>
-            {/* 1. Anéis de Fundo (Giram com o dedo) */}
             {renderOrbitRings()}
-
-            {/* 2. Grupos de Planetas (Giram com o dedo + Rotação Automática própria) */}
-            {[5, 4, 3, 2, 1].map((score, i) => {
+            {[5, 4, 3, 2, 1].map((score) => {
               const group = orbits[score as keyof typeof orbits];
               if (!group || group.length === 0) return null;
-
-              // Score 5 (perto) -> Index visual 0
               const radius = 60 + (6 - score - 1) * ORBIT_STEP;
-
               return (
                 <OrbitGroup
                   key={`orbit-group-${score}`}
@@ -363,7 +367,6 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
             })}
           </Animated.View>
 
-          {/* Camada Central (Sol/Usuário) - Fica fixa visualmente no centro */}
           <Animated.View
             style={[
               styles.sunWrapper,
@@ -410,6 +413,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginVertical: 10,
     overflow: "hidden",
+    borderRadius: 20,
   },
   hintText: {
     position: "absolute",
