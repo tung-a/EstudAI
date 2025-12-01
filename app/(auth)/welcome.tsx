@@ -1,25 +1,27 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
+import { useCosmetics } from "@/contexts/CosmeticsContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { logSignUp } from "@/lib/analytics";
 import { getSunSign, parseDateString } from "@/lib/astrology"; // <--- Importar a lógica nova
+import { getDefaultProfilePictureId } from "@/lib/profilePictures";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -31,6 +33,7 @@ export default function WelcomeScreen() {
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+  const { refreshUserData } = useCosmetics();
 
   const router = useRouter();
   const { name, email, password } = useLocalSearchParams<{
@@ -92,6 +95,9 @@ export default function WelcomeScreen() {
       return;
     }
     const sign = getSunSign(parsedDate.day, parsedDate.month);
+    const defaultProfilePictureId = getDefaultProfilePictureId(sign);
+    const initialInventory = ["skin_classic", "bg_void"];
+    if (defaultProfilePictureId) initialInventory.push(defaultProfilePictureId);
 
     setLoading(true);
     try {
@@ -119,7 +125,16 @@ export default function WelcomeScreen() {
           moon: null, // Requer cálculo complexo/API
           ascendant: null, // Requer cálculo complexo/API
         },
+        wallet: { stardust: 500 },
+        inventory: initialInventory,
+        equipped: {
+          skin: "skin_classic",
+          background: "bg_void",
+          profilePicture: defaultProfilePictureId ?? null,
+        },
       });
+
+      await refreshUserData(user);
 
       logSignUp();
       // O redirecionamento automático ocorre no _layout.tsx

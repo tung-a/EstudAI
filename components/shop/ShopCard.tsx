@@ -3,19 +3,20 @@ import { ShopItem } from "@/contexts/CosmeticsContext";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Dimensions, Image, ImageSourcePropType, StyleSheet, TouchableOpacity, View } from "react-native";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width / 2 - 24;
 
-interface ShopCardProps {
+type ShopCardProps = {
   item: ShopItem;
   isOwned: boolean;
   isEquipped: boolean;
   // Adicionamos as cores reais do item como prop
   itemColors: string[];
   onPress: () => void;
-}
+  previewImage?: ImageSourcePropType;
+};
 
 export const ShopCard = ({
   item,
@@ -23,7 +24,15 @@ export const ShopCard = ({
   isEquipped,
   itemColors,
   onPress,
+  previewImage,
 }: ShopCardProps) => {
+  const iconName =
+    item.type === "card_skin"
+      ? "style"
+      : item.type === "background"
+      ? "landscape"
+      : "portrait";
+
   // Se as cores não forem passadas (ex: bg transparente), usa um fallback escuro para dar contraste
   const displayColors =
     itemColors && itemColors[0] !== "transparent"
@@ -48,11 +57,22 @@ export const ShopCard = ({
 
         <View style={styles.content}>
           <View style={styles.iconContainer}>
-            {item.type === "card_skin" ? (
-              <MaterialIcons name="style" size={60} color="#FFF" />
-            ) : (
-              <MaterialIcons name="image" size={60} color="#FFF" />
-            )}
+            <LinearGradient
+              colors={itemColors as [string, string]}
+              style={styles.previewGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              {previewImage ? (
+                <Image
+                  source={previewImage}
+                  resizeMode="cover"
+                  style={styles.previewImage}
+                />
+              ) : (
+                <MaterialIcons name={iconName} size={36} color="#FFF" />
+              )}
+            </LinearGradient>
           </View>
 
           <View
@@ -117,6 +137,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     transform: [{ rotate: "-5deg" }],
+  },
+  previewGradient: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   footer: {
     backgroundColor: "rgba(0,0,0,0.7)",

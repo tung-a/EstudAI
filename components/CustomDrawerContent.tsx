@@ -1,24 +1,25 @@
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useChat } from "@/contexts/ChatContext";
+import { useCosmetics } from "@/contexts/CosmeticsContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ZodiacImages } from "@/lib/astrology";
+import { getProfilePictureImageSource } from "@/lib/profilePictureAssets";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
-  DrawerContentComponentProps,
-  DrawerContentScrollView,
+    DrawerContentComponentProps,
+    DrawerContentScrollView,
 } from "@react-navigation/drawer";
 import { signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore"; // <--- Alterado para onSnapshot
 import { useEffect, useState } from "react";
 import {
-  Alert,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -33,6 +34,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const user = auth.currentUser;
+  const { equippedProfilePicture } = useCosmetics();
 
   const [userSign, setUserSign] = useState<string | null>(null);
 
@@ -71,6 +73,11 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     }
   };
 
+  const avatarSource = getProfilePictureImageSource(
+    equippedProfilePicture,
+    userSign
+  );
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: themeColors.card }]}
@@ -98,9 +105,9 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
             },
           ]}
         >
-          {userSign && ZodiacImages[userSign] ? (
+          {avatarSource ? (
             <Image
-              source={ZodiacImages[userSign]}
+              source={avatarSource}
               style={{ width: "100%", height: "100%" }}
             />
           ) : (

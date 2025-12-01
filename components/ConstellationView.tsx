@@ -3,26 +3,27 @@ import { Colors } from "@/constants/theme";
 import { useCosmetics } from "@/contexts/CosmeticsContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ZodiacImages, getAstralSynergy } from "@/lib/astrology";
+import { getProfilePictureImageSource } from "@/lib/profilePictureAssets";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo } from "react";
 import {
-  Dimensions,
-  Image,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    Image,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withDecay,
-  withRepeat,
-  withSequence,
-  withTiming,
+    Easing,
+    cancelAnimation,
+    useAnimatedStyle,
+    useSharedValue,
+    withDecay,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from "react-native-reanimated";
 
 const { width } = Dimensions.get("window");
@@ -236,7 +237,11 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
-  const { currentBackgroundStyle } = useCosmetics(); // Hook do Mercado para skins de fundo
+  const { currentBackgroundStyle, equippedProfilePicture } = useCosmetics(); // Hook do Mercado para skins de fundo
+  const userAvatarSource = getProfilePictureImageSource(
+    equippedProfilePicture,
+    user.zodiacSign
+  );
 
   const gestureRotation = useSharedValue(0);
   const savedRotation = useSharedValue(0);
@@ -387,11 +392,8 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({
                 },
               ]}
             >
-              {user.zodiacSign && ZodiacImages[user.zodiacSign] ? (
-                <Image
-                  source={ZodiacImages[user.zodiacSign]}
-                  style={styles.sunImage}
-                />
+              {userAvatarSource ? (
+                <Image source={userAvatarSource} style={styles.sunImage} />
               ) : (
                 <MaterialIcons
                   name="person"

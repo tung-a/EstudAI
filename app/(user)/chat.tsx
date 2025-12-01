@@ -15,6 +15,7 @@ import * as Speech from "expo-speech";
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -73,6 +74,12 @@ export default function ChatScreen() {
 
   const route = useRoute();
   const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    if ("setOptions" in navigation) {
+      (navigation as any).setOptions({ headerShown: false });
+    }
+  }, [navigation]);
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -344,6 +351,19 @@ Follow-up suggestions (JSON array only):`,
     [themeColors.text]
   );
 
+  const handleOpenSidebar = useCallback(() => {
+    const parent = navigation.getParent?.();
+    if (parent && typeof (parent as any).openDrawer === "function") {
+      (parent as any).openDrawer();
+      return;
+    }
+    if (typeof (navigation as any).openDrawer === "function") {
+      (navigation as any).openDrawer();
+      return;
+    }
+    console.warn("[Chat] Drawer navigation indisponível.");
+  }, [navigation]);
+
   if (!hydrated || authLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
@@ -360,6 +380,24 @@ Follow-up suggestions (JSON array only):`,
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <ThemedView style={styles.container}>
+        <View
+          style={[
+            styles.topBarContainer,
+            { backgroundColor: themeColors.background },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.topBarButton}
+            onPress={handleOpenSidebar}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir guia místico"
+          >
+            <MaterialIcons name="menu" size={20} color={themeColors.accent} />
+            <Text style={[styles.topBarText, { color: themeColors.accent }]}>
+              Guia Místico
+            </Text>
+          </TouchableOpacity>
+        </View>
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -622,6 +660,22 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     marginBottom: 5,
+  },
+  topBarContainer: {
+    paddingHorizontal: 16,
+    minHeight: 80,
+    justifyContent: "flex-end",
+    paddingBottom: 12,
+  },
+  topBarButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+  },
+  topBarText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: "600",
   },
 
   messageContainer: {

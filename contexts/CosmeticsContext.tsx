@@ -1,4 +1,5 @@
 import { auth, db } from "@/firebaseConfig";
+import { getDefaultProfilePictureId } from "@/lib/profilePictures";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
   arrayUnion,
@@ -8,12 +9,18 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { Alert } from "react-native";
 
 // --- TIPOS ---
 export type Rarity = "common" | "rare" | "epic" | "legendary";
-export type ItemType = "card_skin" | "background";
+export type ItemType = "card_skin" | "background" | "profile_picture";
 
 export type ShopItem = {
   id: string;
@@ -21,7 +28,7 @@ export type ShopItem = {
   type: ItemType;
   rarity: Rarity;
   price: number;
-  image: any;
+  image?: any;
   description?: string;
 };
 
@@ -129,10 +136,11 @@ interface CosmeticsContextType {
   inventory: string[];
   equippedSkin: string;
   equippedBackground: string;
+  equippedProfilePicture: string | null;
   buyItem: (item: ShopItem) => Promise<boolean>;
   equipItem: (item: ShopItem) => Promise<void>;
   addStardust: (amount: number) => Promise<void>;
-  refreshUserData: () => void;
+  refreshUserData: (userOverride?: User | null) => Promise<void>;
   currentSkinStyle: SkinStyle;
   currentBackgroundStyle: BackgroundStyle;
 }
@@ -161,58 +169,112 @@ export const CosmeticsProvider = ({
   ]);
   const [equippedSkin, setEquippedSkin] = useState("skin_classic");
   const [equippedBackground, setEquippedBackground] = useState("bg_void");
+  const [equippedProfilePicture, setEquippedProfilePicture] =
+    useState<string | null>(null);
+  const refreshUserDataInternal = useCallback(
+    async (currentUser?: User | null) => {
+      const targetUser = currentUser || user;
+      if (!targetUser) return;
 
-  // 1. Monitorar Autenticação e RESETAR TUDO no logout
+      const docRef = doc(db, "users", targetUser.uid);
+      const snap = await getDoc(docRef);
+
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.wallet?.stardust !== undefined)
+          setCurrency(data.wallet.stardust);
+
+        const pendingUpdates: Record<string, any> = {};
+        let inventoryFromDb = Array.isArray(data.inventory)
+          ? (data.inventory as string[])
+          : ["skin_classic", "bg_void"];
+
+        if (!Array.isArray(data.inventory)) {
+          pendingUpdates.inventory = inventoryFromDb;
+        }
+
+        const defaultProfilePictureId = getDefaultProfilePictureId(
+          data.zodiacSign
+        );
+
+        if (
+          defaultProfilePictureId &&
+          !inventoryFromDb.includes(defaultProfilePictureId)
+        ) {
+          inventoryFromDb = [...inventoryFromDb, defaultProfilePictureId];
+          pendingUpdates.inventory = inventoryFromDb;
+        }
+
+        setInventory(inventoryFromDb);
+
+        const skinId = data.equipped?.skin || "skin_classic";
+        const backgroundId = data.equipped?.background || "bg_void";
+        const profilePictureId =
+          data.equipped?.profilePicture || defaultProfilePictureId || null;
+
+        setEquippedSkin(skinId);
+        setEquippedBackground(backgroundId);
+        setEquippedProfilePicture(profilePictureId);
+
+        if (profilePictureId && !data.equipped?.profilePicture) {
+          pendingUpdates["equipped.profilePicture"] = profilePictureId;
+        }
+
+        if (Object.keys(pendingUpdates).length > 0) {
+          await updateDoc(docRef, pendingUpdates);
+        }
+      } else {
+        // Novo usuário no Firestore
+        const defaultProfilePictureId = getDefaultProfilePictureId(null);
+
+        await setDoc(
+          docRef,
+          {
+            wallet: { stardust: 500 },
+            inventory: [
+              "skin_classic",
+              "bg_void",
+              ...(defaultProfilePictureId ? [defaultProfilePictureId] : []),
+            ],
+            equipped: {
+              skin: "skin_classic",
+              background: "bg_void",
+              profilePicture: defaultProfilePictureId ?? null,
+            },
+          },
+          { merge: true }
+        );
+
+        setCurrency(500);
+        setInventory([
+          "skin_classic",
+          "bg_void",
+          ...(defaultProfilePictureId ? [defaultProfilePictureId] : []),
+        ]);
+        setEquippedSkin("skin_classic");
+        setEquippedBackground("bg_void");
+        setEquippedProfilePicture(defaultProfilePictureId || null);
+      }
+    },
+    [user]
+  );
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        refreshUserData(currentUser);
+        refreshUserDataInternal(currentUser);
       } else {
         // RESET COMPLETO AO DESLOGAR (CORREÇÃO DO BUG)
         setCurrency(0);
         setInventory(["skin_classic", "bg_void"]);
         setEquippedSkin("skin_classic"); // <--- Importante
         setEquippedBackground("bg_void"); // <--- Importante
+        setEquippedProfilePicture(null);
       }
     });
     return () => unsubscribe();
-  }, []);
-
-  const refreshUserData = async (currentUser?: User | null) => {
-    const targetUser = currentUser || user;
-    if (!targetUser) return;
-
-    const docRef = doc(db, "users", targetUser.uid);
-    const snap = await getDoc(docRef);
-
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data.wallet?.stardust !== undefined)
-        setCurrency(data.wallet.stardust);
-      if (data.inventory) setInventory(data.inventory);
-
-      // Garante que carregue o padrão se o campo não existir no banco
-      setEquippedSkin(data.equipped?.skin || "skin_classic");
-      setEquippedBackground(data.equipped?.background || "bg_void");
-    } else {
-      // Novo usuário no Firestore
-      await setDoc(
-        docRef,
-        {
-          wallet: { stardust: 500 },
-          inventory: ["skin_classic", "bg_void"],
-          equipped: { skin: "skin_classic", background: "bg_void" },
-        },
-        { merge: true }
-      );
-
-      setCurrency(500);
-      setInventory(["skin_classic", "bg_void"]);
-      setEquippedSkin("skin_classic");
-      setEquippedBackground("bg_void");
-    }
-  };
+  }, [refreshUserDataInternal]);
 
   const addStardust = async (amount: number) => {
     if (!user) return;
@@ -269,12 +331,18 @@ export const CosmeticsProvider = ({
     if (!user) return;
 
     if (item.type === "card_skin") setEquippedSkin(item.id);
-    else setEquippedBackground(item.id);
+    else if (item.type === "background") setEquippedBackground(item.id);
+    else setEquippedProfilePicture(item.id);
 
     try {
+      const fieldPath =
+        item.type === "card_skin"
+          ? "equipped.skin"
+          : item.type === "background"
+          ? "equipped.background"
+          : "equipped.profilePicture";
       await updateDoc(doc(db, "users", user.uid), {
-        [`equipped.${item.type === "card_skin" ? "skin" : "background"}`]:
-          item.id,
+        [fieldPath]: item.id,
       });
     } catch (error) {
       console.error(error);
@@ -295,10 +363,12 @@ export const CosmeticsProvider = ({
         inventory,
         equippedSkin,
         equippedBackground,
+        equippedProfilePicture,
         buyItem,
         equipItem,
         addStardust,
-        refreshUserData: () => refreshUserData(user),
+        refreshUserData: (override?: User | null) =>
+          refreshUserDataInternal(override || user),
         currentSkinStyle,
         currentBackgroundStyle,
       }}

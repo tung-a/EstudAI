@@ -5,16 +5,22 @@ import { Colors } from "@/constants/theme";
 import {
   COSMETIC_STYLES,
   MOCK_SHOP,
+  Rarity,
   ShopItem,
   useCosmetics,
 } from "@/contexts/CosmeticsContext";
+import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { PROFILE_PICTURE_IMAGE_MAP } from "@/lib/profilePictureAssets";
+import { PROFILE_SIGNS } from "@/lib/profilePictures";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -49,7 +55,66 @@ const CURRENCY_PACKS = [
   },
 ];
 
+const PROFILE_PICTURE_VARIANTS = [
+  {
+    key: "common",
+    label: "Comum",
+    price: 500,
+    rarity: "common" as Rarity,
+    colors: ["#5E60CE", "#4C46A0"],
+  },
+  {
+    key: "rare",
+    label: "Raro",
+    price: 800,
+    rarity: "rare" as Rarity,
+    colors: ["#009FFD", "#2A2A72"],
+  },
+  {
+    key: "epic",
+    label: "Épico",
+    price: 1200,
+    rarity: "epic" as Rarity,
+    colors: ["#FF6A88", "#FF99AC"],
+  },
+  {
+    key: "legendary",
+    label: "Lendário",
+    price: 1800,
+    rarity: "legendary" as Rarity,
+    colors: ["#F9D423", "#FF4E50"],
+  },
+] as const;
+
+const PROFILE_PICTURE_CATALOG = PROFILE_SIGNS.flatMap(({ slug, label }) =>
+  PROFILE_PICTURE_VARIANTS.map((variant) =>
+    ({
+      id: `pfp_${slug}_${variant.key}`,
+      name: `Avatar ${label} • ${variant.label}`,
+      type: "profile_picture",
+      rarity: variant.rarity,
+      price: variant.price,
+      description: `Avatar ${label} de raridade ${variant.label}.`,
+      signSlug: slug,
+      colors: variant.colors,
+    } as ShopItem & { signSlug: string; colors: [string, string] })
+  )
+);
+
+const PROFILE_PICTURE_COLOR_MAP = PROFILE_PICTURE_CATALOG.reduce(
+  (acc, item) => ({ ...acc, [item.id]: item.colors }),
+  {} as Record<string, [string, string]>
+);
+
+const normalizeSign = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
 export default function ShopScreen() {
+  const cosmetics = useCosmetics();
   const {
     currency,
     inventory,
@@ -58,7 +123,8 @@ export default function ShopScreen() {
     addStardust,
     equippedSkin,
     equippedBackground,
-  } = useCosmetics();
+    equippedProfilePicture,
+  } = cosmetics;
 
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
@@ -66,6 +132,39 @@ export default function ShopScreen() {
 
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
+  const [userSign, setUserSign] = useState<string | null>(null);
+  const [loadingSign, setLoadingSign] = useState(true);
+
+  useEffect(() => {
+    const loadSign = async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        setLoadingSign(false);
+        return;
+      }
+      try {
+        const snapshot = await getDoc(doc(db, "users", currentUser.uid));
+        if (snapshot.exists()) {
+          setUserSign((snapshot.data() as any)?.zodiacSign ?? null);
+        }
+      } finally {
+        setLoadingSign(false);
+      }
+    };
+    loadSign();
+  }, []);
+
+  const signSlug = useMemo(
+    () => (userSign ? normalizeSign(userSign) : null),
+    [userSign]
+  );
+
+  const profilePictures = useMemo(() => {
+    if (!signSlug) return [] as ShopItem[];
+    return PROFILE_PICTURE_CATALOG.filter(
+      (item) => item.signSlug === signSlug
+    ) as ShopItem[];
+  }, [signSlug]);
 
   const previewStyle = selectedItem
     ? COSMETIC_STYLES[selectedItem.id as keyof typeof COSMETIC_STYLES]
@@ -73,7 +172,7 @@ export default function ShopScreen() {
 
   const getIconColor = () => {
     if (previewStyle && "iconColor" in previewStyle) {
-      return previewStyle.iconColor;
+      return (previewStyle as { iconColor: string }).iconColor;
     }
     return "#FFF";
   };
@@ -105,10 +204,28 @@ export default function ShopScreen() {
   const backgrounds = MOCK_SHOP.filter((i) => i.type === "background");
 
   // Helper para buscar cores
-  const getItemColors = (id: string) => {
-    const style = COSMETIC_STYLES[id as keyof typeof COSMETIC_STYLES];
-    return style ? style.colors : ["#333", "#000"];
-  };
+  const getItemColors = (id: string) =>
+    PROFILE_PICTURE_COLOR_MAP[id] ??
+    COSMETIC_STYLES[id as keyof typeof COSMETIC_STYLES]?.colors ??
+    ["#333", "#000"];
+
+  const isItemEquipped = (item: ShopItem) =>
+    item.type === "card_skin"
+      ? equippedSkin === item.id
+      : item.type === "background"
+      ? equippedBackground === item.id
+      : equippedProfilePicture === item.id;
+
+  const getItemImage = (id: string) => PROFILE_PICTURE_IMAGE_MAP[id];
+
+  const previewImage = selectedItem ? getItemImage(selectedItem.id) : null;
+  const previewColors = selectedItem ? getItemColors(selectedItem.id) : null;
+  const previewIconName =
+    selectedItem?.type === "card_skin"
+      ? "style"
+      : selectedItem?.type === "background"
+      ? "landscape"
+      : "portrait";
 
   return (
     <ThemedView style={styles.container}>
@@ -156,9 +273,9 @@ export default function ShopScreen() {
                 key={item.id}
                 item={item}
                 isOwned={inventory.includes(item.id)}
-                isEquipped={equippedSkin === item.id}
-                // AQUI: Passamos a cor real do item
+                isEquipped={isItemEquipped(item)}
                 itemColors={getItemColors(item.id)}
+                previewImage={getItemImage(item.id)}
                 onPress={() => setSelectedItem(item)}
               />
             ))}
@@ -178,12 +295,38 @@ export default function ShopScreen() {
                 key={item.id}
                 item={item}
                 isOwned={inventory.includes(item.id)}
-                isEquipped={equippedBackground === item.id}
+                isEquipped={isItemEquipped(item)}
                 itemColors={getItemColors(item.id)}
                 onPress={() => setSelectedItem(item)}
               />
             ))}
           </View>
+
+          {!loadingSign && profilePictures.length > 0 && (
+            <>
+              <View style={styles.sectionHeader}>
+                <MaterialIcons
+                  name="portrait"
+                  size={24}
+                  color={themeColors.accent}
+                />
+                <ThemedText type="subtitle">Avatares Sagrados</ThemedText>
+              </View>
+              <View style={styles.grid}>
+                {profilePictures.map((item) => (
+                  <ShopCard
+                    key={item.id}
+                    item={item}
+                    isOwned={inventory.includes(item.id)}
+                    isEquipped={isItemEquipped(item)}
+                    itemColors={getItemColors(item.id)}
+                    previewImage={getItemImage(item.id)}
+                    onPress={() => setSelectedItem(item)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
         </ScrollView>
 
         {/* ... Modais (Mantidos iguais, omitidos para brevidade) ... */}
@@ -209,23 +352,29 @@ export default function ShopScreen() {
                       { backgroundColor: "#222", overflow: "hidden" },
                     ]}
                   >
-                    {previewStyle && previewStyle.colors && (
-                      <LinearGradient
-                        colors={previewStyle.colors as [string, string]}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                    {previewImage ? (
+                      <Image
+                        source={previewImage}
+                        resizeMode="cover"
+                        style={styles.previewImage}
                       />
+                    ) : (
+                      <>
+                        {previewColors && (
+                          <LinearGradient
+                            colors={previewColors as [string, string]}
+                            style={StyleSheet.absoluteFill}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                          />
+                        )}
+                        <MaterialIcons
+                          name={previewIconName}
+                          size={80}
+                          color={getIconColor()}
+                        />
+                      </>
                     )}
-                    <MaterialIcons
-                      name={
-                        selectedItem.type === "card_skin"
-                          ? "style"
-                          : "landscape"
-                      }
-                      size={80}
-                      color={getIconColor()}
-                    />
                   </View>
                   <ThemedText
                     type="title"
@@ -250,24 +399,16 @@ export default function ShopScreen() {
                       style={[
                         styles.actionButton,
                         {
-                          backgroundColor:
-                            equippedSkin === selectedItem.id ||
-                            equippedBackground === selectedItem.id
-                              ? "#4CAF50"
-                              : themeColors.accent,
+                          backgroundColor: isItemEquipped(selectedItem)
+                            ? "#4CAF50"
+                            : themeColors.accent,
                         },
                       ]}
                       onPress={handleEquip}
-                      disabled={
-                        equippedSkin === selectedItem.id ||
-                        equippedBackground === selectedItem.id
-                      }
+                      disabled={isItemEquipped(selectedItem)}
                     >
                       <ThemedText style={styles.buttonText}>
-                        {equippedSkin === selectedItem.id ||
-                        equippedBackground === selectedItem.id
-                          ? "EQUIPADO"
-                          : "EQUIPAR"}
+                        {isItemEquipped(selectedItem) ? "EQUIPADO" : "EQUIPAR"}
                       </ThemedText>
                     </TouchableOpacity>
                   ) : (
@@ -484,4 +625,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   priceTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
+  },
 });

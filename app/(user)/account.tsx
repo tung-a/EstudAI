@@ -2,9 +2,11 @@ import { ConstellationView, Friend } from "@/components/ConstellationView";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
+import { useCosmetics } from "@/contexts/CosmeticsContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { getAstralSynergy, SynergyResult, ZodiacImages } from "@/lib/astrology";
+import { getProfilePictureImageSource } from "@/lib/profilePictureAssets";
 import { MaterialIcons as MaterialIconsOrigin } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -68,6 +70,7 @@ export default function AccountScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
+  const { equippedProfilePicture } = useCosmetics();
 
   const [isModalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -90,6 +93,11 @@ export default function AccountScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const currentUser = auth.currentUser;
+
+  const avatarSource = getProfilePictureImageSource(
+    equippedProfilePicture,
+    userData?.zodiacSign
+  );
 
   useEffect(() => {
     if (currentUser) {
@@ -226,6 +234,7 @@ export default function AccountScreen() {
         Alert.alert("Não encontrado", "Nenhum viajante encontrado.");
       }
     } catch (error) {
+      console.error("Erro ao buscar usuário:", error);
       Alert.alert("Erro", "Falha ao buscar usuário.");
     } finally {
       setSearchLoading(false);
@@ -246,6 +255,7 @@ export default function AccountScreen() {
       setSearchText("");
       setFoundUser(null);
     } catch (error) {
+      console.error("Erro ao adicionar amigo:", error);
       Alert.alert("Erro", "Não foi possível adicionar.");
     }
   };
@@ -305,6 +315,7 @@ export default function AccountScreen() {
       );
       setSynergyModalVisible(false);
     } catch (error) {
+      console.error("Erro ao enviar intenção:", error);
       Alert.alert("Erro", "A energia se dissipou no caminho.");
     } finally {
       setSendingIntention(null);
@@ -341,9 +352,9 @@ export default function AccountScreen() {
                 { borderColor: themeColors.accent },
               ]}
             >
-              {userData?.zodiacSign && ZodiacImages[userData.zodiacSign] ? (
+              {avatarSource ? (
                 <Image
-                  source={ZodiacImages[userData.zodiacSign]}
+                  source={avatarSource}
                   style={styles.avatarImage}
                   resizeMode="cover"
                 />
@@ -405,6 +416,38 @@ export default function AccountScreen() {
             </View>
             <View style={[styles.newBadge, { backgroundColor: "#FFD700" }]}>
               <Text style={styles.newBadgeText}>NOVO</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.inventoryCard,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.accent + "40",
+              },
+            ]}
+            onPress={() => router.push("/inventory")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.inventoryCardContent}>
+              <View>
+                <ThemedText type="subtitle" style={{ color: themeColors.text }}>
+                  Inventário Cósmico
+                </ThemedText>
+                <ThemedText
+                  style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}
+                >
+                  Gerencie e equipe suas relíquias.
+                </ThemedText>
+              </View>
+              <View style={styles.shopIconContainer}>
+                <MaterialIcons
+                  name="inventory"
+                  size={28}
+                  color={themeColors.accent}
+                />
+              </View>
             </View>
           </TouchableOpacity>
 
@@ -1085,6 +1128,21 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   shopCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  inventoryCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  inventoryCardContent: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,

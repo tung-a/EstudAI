@@ -5,6 +5,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { auth, db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "expo-router";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -46,6 +47,8 @@ export default function AstralMapScreen() {
   const { getChatModel } = useChat();
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+
+  const navigation = useNavigation<any>();
 
   // 1. Carregar dados
   useEffect(() => {
@@ -304,7 +307,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   generateButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
   mapContainer: { gap: 15 },
   planetCard: {
     padding: 16,
@@ -331,9 +333,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 10,
   },
-  summary: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.9,
-  },
+  summary: { fontSize: 14, lineHeight: 20, opacity: 0.9 },
 });
