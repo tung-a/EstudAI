@@ -3,76 +3,77 @@ import { ShopItem } from "@/contexts/CosmeticsContext";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { Dimensions, Image, ImageSourcePropType, StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+  Dimensions,
+  Image,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width / 2 - 24;
 
-type ShopCardProps = {
+interface ShopCardProps {
   item: ShopItem;
   isOwned: boolean;
   isEquipped: boolean;
-  // Adicionamos as cores reais do item como prop
-  itemColors: string[];
+  itemColors?: string[];
+  previewImage?: any; // Nova prop para imagem
   onPress: () => void;
-  previewImage?: ImageSourcePropType;
-};
+}
 
 export const ShopCard = ({
   item,
   isOwned,
   isEquipped,
   itemColors,
-  onPress,
   previewImage,
+  onPress,
 }: ShopCardProps) => {
-  const iconName =
-    item.type === "card_skin"
-      ? "style"
-      : item.type === "background"
-      ? "landscape"
-      : "portrait";
-
-  // Se as cores não forem passadas (ex: bg transparente), usa um fallback escuro para dar contraste
   const displayColors =
     itemColors && itemColors[0] !== "transparent"
       ? itemColors
       : ["#2C2C2C", "#1A1A1A"];
+
+  // Ajusta altura: Quadrado para Avatares, Retângulo para Cartas
+  const isAvatar = item.type === "profile_picture";
+  const cardHeight = isAvatar ? CARD_WIDTH + 20 : CARD_WIDTH * 1.3;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
       <View
         style={[
           styles.container,
+          { height: cardHeight }, // Altura dinâmica
           isEquipped && { borderColor: "#4CAF50", borderWidth: 2 },
         ]}
       >
-        {/* Agora usamos as cores DO ITEM, não da raridade */}
-        <LinearGradient
-          colors={displayColors as any}
-          style={styles.background}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
+        {/* Renderiza Imagem se houver (Avatar), senão Gradiente (Skin) */}
+        {previewImage ? (
+          <Image
+            source={previewImage}
+            style={styles.backgroundImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <LinearGradient
+            colors={displayColors as any}
+            style={styles.background}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+        )}
 
         <View style={styles.content}>
           <View style={styles.iconContainer}>
-            <LinearGradient
-              colors={itemColors as [string, string]}
-              style={styles.previewGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              {previewImage ? (
-                <Image
-                  source={previewImage}
-                  resizeMode="cover"
-                  style={styles.previewImage}
-                />
+            {/* Só mostra ícone se NÃO tiver imagem de preview */}
+            {!previewImage &&
+              (item.type === "card_skin" ? (
+                <MaterialIcons name="style" size={60} color="#FFF" />
               ) : (
-                <MaterialIcons name={iconName} size={36} color="#FFF" />
-              )}
-            </LinearGradient>
+                <MaterialIcons name="image" size={60} color="#FFF" />
+              ))}
           </View>
 
           <View
@@ -81,24 +82,31 @@ export const ShopCard = ({
               isEquipped && { backgroundColor: "#4CAF50" },
             ]}
           >
-            <View>
+            {/* CORREÇÃO DE ALINHAMENTO: flex: 1 para o texto não empurrar o preço */}
+            <View style={styles.textContainer}>
               <ThemedText style={styles.itemName} numberOfLines={1}>
                 {item.name}
               </ThemedText>
-              {/* Mostramos a raridade aqui embaixo em texto pequeno */}
               <ThemedText style={styles.rarityText}>{item.rarity}</ThemedText>
             </View>
 
-            {isEquipped ? (
-              <MaterialIcons name="check-circle" size={16} color="#FFF" />
-            ) : isOwned ? (
-              <MaterialIcons name="check" size={16} color="#FFF" />
-            ) : (
-              <View style={styles.priceContainer}>
-                <MaterialIcons name="auto-awesome" size={12} color="#FFD700" />
-                <ThemedText style={styles.priceText}>{item.price}</ThemedText>
-              </View>
-            )}
+            {/* Lado Direito (Preço ou Check) fixo */}
+            <View style={styles.statusContainer}>
+              {isEquipped ? (
+                <MaterialIcons name="check-circle" size={16} color="#FFF" />
+              ) : isOwned ? (
+                <MaterialIcons name="check" size={16} color="#FFF" />
+              ) : (
+                <View style={styles.priceContainer}>
+                  <MaterialIcons
+                    name="auto-awesome"
+                    size={12}
+                    color="#FFD700"
+                  />
+                  <ThemedText style={styles.priceText}>{item.price}</ThemedText>
+                </View>
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -109,7 +117,7 @@ export const ShopCard = ({
 const styles = StyleSheet.create({
   container: {
     width: CARD_WIDTH,
-    height: CARD_WIDTH * 1.3,
+    // height é definido inline agora
     marginBottom: 16,
     borderRadius: 12,
     overflow: "hidden",
@@ -125,7 +133,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: "100%",
     height: "100%",
-    opacity: 1, // Aumentei a opacidade para ver a cor real
+    opacity: 1,
+  },
+  backgroundImage: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
   },
   content: {
     flex: 1,
@@ -138,18 +151,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     transform: [{ rotate: "-5deg" }],
   },
-  previewGradient: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  previewImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-  },
   footer: {
     backgroundColor: "rgba(0,0,0,0.7)",
     padding: 8,
@@ -157,6 +158,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  // --- CORREÇÕES DE ESTILO ---
+  textContainer: {
+    flex: 1, // Ocupa o espaço disponível
+    marginRight: 8, // Espaço para não colar no preço
+  },
+  statusContainer: {
+    flexShrink: 0, // Garante que o preço/ícone não encolha
   },
   itemName: {
     color: "#FFF",

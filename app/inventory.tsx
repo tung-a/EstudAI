@@ -2,11 +2,11 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import {
-    COSMETIC_STYLES,
-    MOCK_SHOP,
-    Rarity,
-    ShopItem,
-    useCosmetics,
+  COSMETIC_STYLES,
+  MOCK_SHOP,
+  Rarity,
+  ShopItem,
+  useCosmetics,
 } from "@/contexts/CosmeticsContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { PROFILE_PICTURE_IMAGE_MAP } from "@/lib/profilePictureAssets";
@@ -16,13 +16,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -58,16 +58,17 @@ const PROFILE_PICTURE_VARIANTS = [
 ] as const;
 
 const PROFILE_PICTURE_CATALOG = PROFILE_SIGNS.flatMap(({ slug, label }) =>
-  PROFILE_PICTURE_VARIANTS.map((variant) =>
-    ({
-      id: `pfp_${slug}_${variant.key}`,
-      name: `Avatar ${label} • ${variant.label}`,
-      type: "profile_picture",
-      rarity: variant.rarity,
-      price: variant.price,
-      signSlug: slug,
-      colors: variant.colors,
-    } as ShopItem & { signSlug: string; colors: [string, string] })
+  PROFILE_PICTURE_VARIANTS.map(
+    (variant) =>
+      ({
+        id: `pfp_${slug}_${variant.key}`,
+        name: `Avatar ${label} • ${variant.label}`,
+        type: "profile_picture",
+        rarity: variant.rarity,
+        price: variant.price,
+        signSlug: slug,
+        colors: variant.colors,
+      } as ShopItem & { signSlug: string; colors: [string, string] })
   )
 );
 
@@ -75,7 +76,6 @@ const PROFILE_PICTURE_COLOR_MAP = PROFILE_PICTURE_CATALOG.reduce(
   (acc, item) => ({ ...acc, [item.id]: item.colors }),
   {} as Record<string, [string, string]>
 );
-
 
 const ZODIAC_GRADIENTS: Record<string, [string, string]> = {
   aries: ["#FF6B6B", "#C44D58"],
@@ -93,8 +93,10 @@ const ZODIAC_GRADIENTS: Record<string, [string, string]> = {
 };
 
 PROFILE_SIGNS.forEach(({ slug }) => {
-  PROFILE_PICTURE_COLOR_MAP[`pfp_zodiac_${slug}`] =
-    ZODIAC_GRADIENTS[slug] || ["#2E004E", "#000000"];
+  PROFILE_PICTURE_COLOR_MAP[`pfp_zodiac_${slug}`] = ZODIAC_GRADIENTS[slug] || [
+    "#2E004E",
+    "#000000",
+  ];
 });
 
 const DEFAULT_PROFILE_ITEMS: Record<string, ShopItem> = PROFILE_SIGNS.reduce(
@@ -151,8 +153,10 @@ export default function InventoryScreen() {
 
   const getStyleForItem = (id: string) =>
     PROFILE_PICTURE_COLOR_MAP[id] ??
-    COSMETIC_STYLES[id as keyof typeof COSMETIC_STYLES]?.colors ??
-    ["#333", "#000"];
+    COSMETIC_STYLES[id as keyof typeof COSMETIC_STYLES]?.colors ?? [
+      "#333",
+      "#000",
+    ];
 
   const isEquipped = (itemId: string, type: string) =>
     type === "card_skin"
@@ -169,6 +173,7 @@ export default function InventoryScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
+        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -186,55 +191,56 @@ export default function InventoryScreen() {
           <View style={{ width: 26 }} />
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersRow}
-          style={styles.filtersScroll}
-        >
-          {(
-            [
-              { label: "Peles de Tarot", value: "card_skin" },
-              { label: "Ambientes Cósmicos", value: "background" },
-              { label: "Avatares", value: "profile_picture" },
-            ] as const
-          ).map((tab) => {
-            const active = filter === tab.value;
-            return (
-              <TouchableOpacity
-                key={tab.value}
-                style={[
-                  styles.filterChip,
-                  {
-                    borderColor: active
-                      ? themeColors.accent
-                      : themeColors.icon + "30",
-                    backgroundColor: active
-                      ? themeColors.accent + "20"
-                      : "transparent",
-                  },
-                ]}
-                onPress={() => setFilter(tab.value)}
-              >
-                <Text
-                  style={{
-                    color: active ? themeColors.accent : themeColors.text,
-                    fontWeight: "600",
-                    fontSize: 13,
-                  }}
+        {/* FILTROS (CORRIGIDO: flexGrow: 0 para não esticar) */}
+        <View style={{ maxHeight: 60 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersRow}
+            style={styles.filtersScroll}
+          >
+            {(
+              [
+                { label: "Peles de Tarot", value: "card_skin" },
+                { label: "Ambientes Cósmicos", value: "background" },
+                { label: "Avatares", value: "profile_picture" },
+              ] as const
+            ).map((tab) => {
+              const active = filter === tab.value;
+              return (
+                <TouchableOpacity
+                  key={tab.value}
+                  style={[
+                    styles.filterChip,
+                    {
+                      borderColor: active
+                        ? themeColors.accent
+                        : themeColors.icon + "30",
+                      backgroundColor: active
+                        ? themeColors.accent + "20"
+                        : "transparent",
+                    },
+                  ]}
+                  onPress={() => setFilter(tab.value)}
                 >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={{
+                      color: active ? themeColors.accent : themeColors.text,
+                      fontWeight: "600",
+                      fontSize: 13,
+                    }}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
+        {/* GRID DE ITENS */}
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: 32 },
-          ]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 32 }]}
         >
           {filteredItems.length === 0 ? (
             <View style={styles.emptyState}>
@@ -256,6 +262,11 @@ export default function InventoryScreen() {
                 const style = getStyleForItem(item.id);
                 const equipped = isEquipped(item.id, item.type);
                 const previewImage = getItemImage(item.id);
+
+                // Lógica de Aspect Ratio (Quadrado para avatar, Retângulo para o resto)
+                const isAvatar = item.type === "profile_picture";
+                const itemAspectRatio = isAvatar ? 1 : 3 / 4;
+
                 return (
                   <View key={item.id} style={styles.cardWrapper}>
                     <ThemedView
@@ -264,7 +275,13 @@ export default function InventoryScreen() {
                         { backgroundColor: themeColors.card },
                       ]}
                     >
-                      <View style={styles.previewBox}>
+                      {/* Container da imagem com formato dinâmico */}
+                      <View
+                        style={[
+                          styles.previewBox,
+                          { aspectRatio: itemAspectRatio },
+                        ]}
+                      >
                         {previewImage ? (
                           <Image
                             source={previewImage}
@@ -285,7 +302,7 @@ export default function InventoryScreen() {
                                   ? "style"
                                   : item.type === "background"
                                   ? "landscape"
-                                  : "portrait"
+                                  : "person"
                               }
                               size={42}
                               color="#FFF"
@@ -293,15 +310,14 @@ export default function InventoryScreen() {
                           </>
                         )}
                       </View>
-                      <ThemedText
-                        style={styles.cardTitle}
-                        numberOfLines={1}
-                      >
+
+                      <ThemedText style={styles.cardTitle} numberOfLines={1}>
                         {item.name}
                       </ThemedText>
                       <ThemedText style={styles.cardSubtitle}>
                         {item.rarity}
                       </ThemedText>
+
                       <TouchableOpacity
                         style={[
                           styles.equipButton,
@@ -354,14 +370,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // CORREÇÃO DOS FILTROS AQUI
   filtersScroll: {
     paddingLeft: 20,
     marginBottom: 12,
+    flexGrow: 0, // Impede o ScrollView de crescer verticalmente
   },
   filtersRow: {
     flexDirection: "row",
     gap: 12,
     paddingRight: 20,
+    alignItems: "center", // Mantém os botões alinhados
   },
   filterChip: {
     paddingHorizontal: 16,
@@ -402,7 +421,7 @@ const styles = StyleSheet.create({
   },
   previewBox: {
     width: "100%",
-    aspectRatio: 3 / 4,
+    // aspectRatio é definido inline agora
     borderRadius: 14,
     overflow: "hidden",
     alignItems: "center",
