@@ -1,6 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import UserListItem from "@/components/user-list-item"; // Assumindo que este componente está ok
+import UserListItem, { User } from "@/components/user-list-item"; // Importa User do componente atualizado
 import { Colors } from "@/constants/theme";
 import { db } from "@/firebaseConfig";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -18,16 +18,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: "admin" | "user";
-  age?: string;
-  school?: string;
-  goal?: string;
-}
 
 type SortOption = "name_asc" | "name_desc" | "email_asc" | "email_desc";
 type RoleFilter = "all" | "admin" | "user";
@@ -60,7 +50,6 @@ export default function UserManagementScreen() {
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = users;
 
-    // Filtro por texto
     if (searchText) {
       filtered = filtered.filter(
         (user) =>
@@ -69,15 +58,12 @@ export default function UserManagementScreen() {
       );
     }
 
-    // Filtro por cargo
     if (roleFilter !== "all") {
       filtered = filtered.filter((user) => user.role === roleFilter);
     }
 
-    // Cria uma cópia antes de ordenar
     const sortable = [...filtered];
 
-    // Ordenação
     return sortable.sort((a, b) => {
       switch (sortOption) {
         case "name_asc":
@@ -98,30 +84,22 @@ export default function UserManagementScreen() {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={themeColors.accent} />
-        <ThemedText>Carregando usuários...</ThemedText>
+        <ThemedText>Consultando registros...</ThemedText>
       </ThemedView>
     );
   }
 
-  const sortOptions: { label: string; value: SortOption }[] = [
-    { label: "Nome (A-Z)", value: "name_asc" },
-    { label: "Nome (Z-A)", value: "name_desc" },
-    { label: "Email (A-Z)", value: "email_asc" },
-    { label: "Email (Z-A)", value: "email_desc" },
-  ];
-
   const roleFilters: { label: string; value: RoleFilter }[] = [
     { label: "Todos", value: "all" },
-    { label: "Admins", value: "admin" },
-    { label: "Usuários", value: "user" },
+    { label: "Mestres", value: "admin" },
+    { label: "Viajantes", value: "user" },
   ];
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.flex}>
-        {/* Header */}
         <View style={styles.header}>
-          <ThemedText type="title">Gerenciar Usuários</ThemedText>
+          <ThemedText type="title">Comunidade</ThemedText>
           <TextInput
             style={[
               styles.searchInput,
@@ -131,14 +109,13 @@ export default function UserManagementScreen() {
                 color: themeColors.text,
               },
             ]}
-            placeholder="Buscar por nome ou e-mail..."
-            placeholderTextColor={themeColors.icon}
+            placeholder="Buscar alma por nome ou e-mail..."
+            placeholderTextColor={themeColors.icon + "80"}
             value={searchText}
             onChangeText={setSearchText}
           />
-          {/* Container de Filtros */}
+
           <View style={styles.filtersContainer}>
-            {/* Botão Ordenar */}
             <TouchableOpacity
               style={[
                 styles.sortButton,
@@ -150,23 +127,18 @@ export default function UserManagementScreen() {
               onPress={() => setSortModalVisible(true)}
             >
               <MaterialIcons name="sort" size={20} color={themeColors.icon} />
-              <ThemedText style={styles.sortButtonText}>Ordenar</ThemedText>
             </TouchableOpacity>
 
-            {/* Filtro de Cargo como Grupo Segmentado */}
             <View
               style={[
-                styles.roleFilterGroup, // Estilo do grupo
-                {
-                  borderColor: themeColors.icon + "30", // Borda externa
-                },
+                styles.roleFilterGroup,
+                { borderColor: themeColors.icon + "30" },
               ]}
             >
               {roleFilters.map((filter, index) => (
                 <TouchableOpacity
                   key={filter.value}
                   onPress={() => setRoleFilter(filter.value)}
-                  // Aplicar estilos base e ativo
                   style={[
                     styles.roleFilterButtonSegmented,
                     {
@@ -174,7 +146,6 @@ export default function UserManagementScreen() {
                         roleFilter === filter.value
                           ? themeColors.accent
                           : themeColors.card,
-                      // Adicionar borda direita a todos exceto o último
                       borderRightWidth:
                         index < roleFilters.length - 1
                           ? StyleSheet.hairlineWidth
@@ -186,7 +157,6 @@ export default function UserManagementScreen() {
                   <Text
                     style={[
                       styles.roleFilterText,
-                      // Aplicar cor do texto base e ativa
                       {
                         color:
                           roleFilter === filter.value
@@ -203,7 +173,6 @@ export default function UserManagementScreen() {
           </View>
         </View>
 
-        {/* Lista */}
         <FlatList
           data={filteredAndSortedUsers}
           keyExtractor={(item) => item.id}
@@ -211,13 +180,13 @@ export default function UserManagementScreen() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <ThemedText style={styles.emptyListText}>
-              Nenhum usuário encontrado com os filtros aplicados.
+              Nenhum viajante encontrado.
             </ThemedText>
           }
         />
       </SafeAreaView>
 
-      {/* Modal de Ordenação */}
+      {/* Modal de Ordenação Mantido Similar */}
       <Modal
         animationType="fade"
         transparent
@@ -227,57 +196,54 @@ export default function UserManagementScreen() {
         <TouchableOpacity
           style={styles.modalBackdrop}
           activeOpacity={1}
-          onPress={() => setSortModalVisible(false)} // Fecha ao tocar fora
+          onPress={() => setSortModalVisible(false)}
         >
-          {/* Evita que o toque no conteúdo feche o modal */}
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <View
-              style={[
-                styles.modalContent,
-                { backgroundColor: themeColors.card },
-              ]}
-            >
-              <ThemedText type="subtitle" style={styles.modalTitle}>
-                Ordenar Por
-              </ThemedText>
-              {sortOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={styles.sortOptionButton}
-                  onPress={() => {
-                    setSortOption(option.value);
-                    setSortModalVisible(false);
-                  }}
+          <View
+            style={[styles.modalContent, { backgroundColor: themeColors.card }]}
+          >
+            <ThemedText type="subtitle" style={styles.modalTitle}>
+              Ordenar Por
+            </ThemedText>
+            {[
+              { label: "Nome (A-Z)", value: "name_asc" },
+              { label: "Nome (Z-A)", value: "name_desc" },
+              { label: "Email (A-Z)", value: "email_asc" },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={styles.sortOptionButton}
+                onPress={() => {
+                  setSortOption(option.value as SortOption);
+                  setSortModalVisible(false);
+                }}
+              >
+                <ThemedText
+                  style={[
+                    styles.sortOptionText,
+                    sortOption === option.value && {
+                      color: themeColors.accent,
+                      fontWeight: "bold",
+                    },
+                  ]}
                 >
-                  <ThemedText
-                    style={[
-                      styles.sortOptionText,
-                      sortOption === option.value && {
-                        color: themeColors.accent,
-                        fontWeight: "bold",
-                      },
-                    ]}
-                  >
-                    {option.label}
-                  </ThemedText>
-                  {sortOption === option.value && (
-                    <MaterialIcons
-                      name="check"
-                      size={20}
-                      color={themeColors.accent}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
+                  {option.label}
+                </ThemedText>
+                {sortOption === option.value && (
+                  <MaterialIcons
+                    name="check"
+                    size={20}
+                    color={themeColors.accent}
+                  />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
         </TouchableOpacity>
       </Modal>
     </ThemedView>
   );
 }
 
-// --- Estilos Atualizados ---
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
@@ -297,7 +263,7 @@ const styles = StyleSheet.create({
   searchInput: {
     height: 45,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     marginTop: 16,
     fontSize: 16,
@@ -306,61 +272,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 16,
-    gap: 12, // Espaço entre Ordenar e Grupo de Filtros
-    // Remover flexWrap, o grupo de filtros agora é flex: 1
+    gap: 10,
   },
   sortButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8, // Voltando para borda normal
+    padding: 10,
+    borderRadius: 8,
     borderWidth: 1,
-  },
-  sortButtonText: {
-    fontSize: 14,
-  },
-  // Estilo para o grupo segmentado
-  roleFilterGroup: {
-    flex: 1, // <<< Ocupa o espaço restante
-    flexDirection: "row",
-    borderRadius: 8, // Borda externa arredondada
-    borderWidth: 1, // Borda externa
-    overflow: "hidden", // Importante
-  },
-  // Estilo para cada botão dentro do grupo
-  roleFilterButtonSegmented: {
-    flex: 1, // <<< Faz os botões dividirem o espaço igualmente
-    paddingVertical: 10,
-    // paddingHorizontal: 10, // Padding horizontal pode ser ajustado se necessário
-    alignItems: "center", // Centraliza o texto
+    alignItems: "center",
     justifyContent: "center",
-    // Borda direita será aplicada condicionalmente no JSX
   },
-  // Separador não é mais um estilo de View, a borda está no botão
-  // segmentSeparator: { ... },
-  roleFilterText: {
-    fontWeight: "600",
-    fontSize: 14,
-    textAlign: "center",
+  roleFilterGroup: {
+    flex: 1,
+    flexDirection: "row",
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+    height: 42,
   },
-  roleFilterTextActive: {
-    color: "#fff", // Cor do texto quando o botão está ativo
+  roleFilterButtonSegmented: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 20,
-  },
+  roleFilterText: { fontWeight: "600", fontSize: 13 },
+  listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
   emptyListText: {
     textAlign: "center",
     marginTop: 50,
     fontSize: 16,
     opacity: 0.7,
-    paddingHorizontal: 20,
   },
-  // --- Estilos do Modal (sem alterações) ---
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -372,17 +313,10 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 350,
     borderRadius: 16,
-    paddingVertical: 15,
-    paddingHorizontal: 5,
-    alignItems: "stretch",
+    paddingVertical: 20,
+    paddingHorizontal: 10,
   },
-  modalTitle: {
-    textAlign: "center",
-    marginBottom: 15,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128,128,128,0.1)",
-  },
+  modalTitle: { textAlign: "center", marginBottom: 15 },
   sortOptionButton: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -390,9 +324,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,
-    marginVertical: 2,
   },
-  sortOptionText: {
-    fontSize: 16,
-  },
+  sortOptionText: { fontSize: 16 },
 });

@@ -13,6 +13,11 @@ import "react-native-reanimated";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
+// --- NOVOS IMPORTS (Trazidos da pasta user) ---
+import { NotificationManager } from "@/components/NotificationManager";
+import { ChatProvider } from "@/contexts/ChatContext";
+import { CosmeticsProvider } from "@/contexts/CosmeticsContext"; //
+
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
@@ -29,6 +34,7 @@ function RootLayoutNav() {
         if (user.role === "admin") {
           router.replace("/(admin)/dashboard");
         } else {
+          // Redireciona usuário logado para a área interna
           router.replace("/(user)");
         }
       } else {
@@ -48,6 +54,8 @@ function RootLayoutNav() {
       <Stack.Screen name="(admin)" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+      {/* A tela de shop é registrada automaticamente se o arquivo app/shop.tsx existir */}
+      <Stack.Screen name="shop" />
     </Stack>
   );
 }
@@ -58,12 +66,19 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <ThemeProvider
-          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-        >
-          <RootLayoutNav />
-          <StatusBar style="auto" />
-        </ThemeProvider>
+        {/* ENVOLVENDO O APP TODO COM OS CONTEXTOS GLOBAIS */}
+        <ChatProvider>
+          <CosmeticsProvider>
+            <ThemeProvider
+              value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+            >
+              {/* Gerenciador de Notificações no topo para aparecer em qualquer lugar */}
+              <NotificationManager />
+              <RootLayoutNav />
+              <StatusBar style="auto" />
+            </ThemeProvider>
+          </CosmeticsProvider>
+        </ChatProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

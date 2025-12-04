@@ -1,131 +1,103 @@
-// app/(user)/_layout.tsx
-import { CustomDrawerContent } from "@/components/CustomDrawerContent"; // Importa o conteúdo da gaveta
+import { CustomDrawerContent } from "@/components/CustomDrawerContent";
 import { HapticTab } from "@/components/haptic-tab";
-import { ThemedText } from "@/components/themed-text"; // Import ThemedText
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
-import { ChatProvider } from "@/contexts/ChatContext"; // Importa o provider do chat
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { MaterialIcons } from "@expo/vector-icons"; // Ícone do menu
-import { createDrawerNavigator } from "@react-navigation/drawer"; // Importa Drawer
-import { DrawerActions, useNavigation } from "@react-navigation/native"; // Para abrir a gaveta
-import { Tabs } from "expo-router";
-import React from "react";
-import { View } from "react-native"; // Import View
-import { TouchableOpacity } from "react-native-gesture-handler"; // Para botão do header
+import { MaterialIcons } from "@expo/vector-icons";
+import { createDrawerNavigator } from "@react-navigation/drawer";
+import { Tabs } from "expo-router"; //
 
-// Cria o Navegador de Gaveta
+// REMOVIDOS: ChatProvider, CosmeticsProvider, NotificationManager (já estão na raiz)
+
 const Drawer = createDrawerNavigator();
 
-// Componente que contém as Tabs (necessário para aninhar)
 function TabLayout() {
   const colorScheme = useColorScheme();
-  const navigation = useNavigation(); // Hook para acessar a navegação (e abrir a gaveta)
   const themeColors = Colors[colorScheme ?? "light"];
 
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
-        // headerShown: false, // Header será mostrado em algumas telas
         tabBarButton: HapticTab,
         headerStyle: {
-          backgroundColor: themeColors.card, // Cor de fundo do header
-          elevation: 0, // Remove sombra no Android
-          shadowOpacity: 0, // Remove sombra no iOS
+          backgroundColor: themeColors.card,
+          elevation: 0,
+          shadowOpacity: 0,
           borderBottomWidth: 1,
-          borderBottomColor: themeColors.icon + "20", // Borda sutil
+          borderBottomColor: themeColors.icon + "20",
         },
-        headerTintColor: themeColors.text, // Cor do título e ícones
+        headerTintColor: themeColors.text,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
-          headerShown: false, // Esconde header na Home
+          title: "Cosmos",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="house.fill" color={color} />
+            <MaterialIcons name="auto-awesome" size={28} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
-          headerShown: true, // Mostra header SÓ na tela de Chat
-          headerTitle: "", // Remove o título padrão do header, o chat.tsx colocará o seu
-          headerLeft: () => (
-            // Define o componente esquerdo do header
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <TouchableOpacity
-                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-                style={{ marginLeft: 15, padding: 5 }} // Adiciona padding para toque fácil
-              >
-                <MaterialIcons name="menu" size={28} color={themeColors.icon} />
-              </TouchableOpacity>
-              {/* Adiciona o nome da IA aqui */}
-              <ThemedText
-                type="subtitle"
-                style={{ marginLeft: 10, fontSize: 18 }}
-              >
-                Estud.IA
-              </ThemedText>
-            </View>
-          ),
+          title: "Oráculo",
+          headerShown: true,
+          headerTitle: "",
+          // ... headerLeft mantido igual ao original ...
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="paperplane.fill" color={color} />
+            <MaterialIcons name="remove-red-eye" size={28} color={color} />
           ),
-          // title: "Chat IA", // Pode remover ou manter se quiser na Tab Bar
         }}
       />
       <Tabs.Screen
         name="agenda"
         options={{
-          title: "Agenda",
-          headerShown: false, // Esconde header na Agenda
+          title: "Rituais",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="calendar" color={color} />
+            <MaterialIcons name="calendar-today" size={28} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Perfil",
-          headerShown: false, // Esconde header no Perfil
+          title: "Astral",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="person.fill" color={color} />
+            <MaterialIcons name="star" size={28} color={color} />
           ),
         }}
       />
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: "Perfil",
+          headerShown: false,
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="person" size={28} color={color} />
+          ),
+        }}
+      />
+      {/* REMOVIDO: <Tabs.Screen name="shop" ... /> pois agora é uma tela global */}
     </Tabs>
   );
 }
 
-// Layout principal do usuário agora é um Drawer
 export default function UserDrawerLayout() {
+  // Apenas o Drawer Navigator puro, sem providers em volta
   return (
-    // Envolve com o ChatProvider para dar acesso ao contexto
-    <ChatProvider>
-      <Drawer.Navigator
-        drawerContent={(props) => <CustomDrawerContent {...props} />} // Usa o conteúdo personalizado
-        screenOptions={{
-          headerShown: false, // Esconde o header padrão do Drawer
-          drawerType: "slide", // Ou 'front', 'back'
-          swipeEnabled: false, // Permite abrir arrastando
-        }}
-      >
-        {/* A única tela do Drawer contém o TabLayout */}
-        <Drawer.Screen
-          name="(tabs)" // Nome da rota que contém as Tabs
-          component={TabLayout}
-          options={
-            {
-              // Opções específicas para a tela que contém as tabs, se necessário
-            }
-          }
-        />
-      </Drawer.Navigator>
-    </ChatProvider>
+    <Drawer.Navigator
+      drawerContent={(props) => <CustomDrawerContent {...props} />}
+      screenOptions={{
+        headerShown: false,
+        drawerType: "slide",
+        swipeEnabled: false,
+      }}
+    >
+      <Drawer.Screen name="(tabs)" component={TabLayout} />
+    </Drawer.Navigator>
   );
 }

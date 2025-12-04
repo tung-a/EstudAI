@@ -3,7 +3,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router"; // Import useRouter
+import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -43,7 +43,8 @@ export default function RegisterScreen() {
   };
 
   const getPasswordStrength = () => {
-    if (password.length === 0) return { strength: "", color: "#d9534f" };
+    if (password.length === 0)
+      return { strength: "", color: themeColors.destructive };
     if (password.length < 6) return { strength: "Fraca", color: "#f0ad4e" };
     if (password.length < 10) return { strength: "Média", color: "#5bc0de" };
     return { strength: "Forte", color: "#5cb85c" };
@@ -89,10 +90,15 @@ export default function RegisterScreen() {
             <ThemedText type="title" style={styles.title}>
               Crie sua Conta
             </ThemedText>
+
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
-              <MaterialIcons name="person" size={20} color={themeColors.icon} />
+              <MaterialIcons
+                name="person-outline"
+                size={20}
+                color={themeColors.icon}
+              />
               <TextInput
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Nome Completo"
@@ -101,18 +107,23 @@ export default function RegisterScreen() {
                 onChangeText={setName}
               />
             </View>
+
             <View
               style={[
                 styles.inputContainer,
                 {
                   borderColor:
                     !isEmailValid && email.length > 0
-                      ? "red"
+                      ? themeColors.destructive
                       : themeColors.icon,
                 },
               ]}
             >
-              <MaterialIcons name="email" size={20} color={themeColors.icon} />
+              <MaterialIcons
+                name="mail-outline"
+                size={20}
+                color={themeColors.icon}
+              />
               <TextInput
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Email"
@@ -124,12 +135,22 @@ export default function RegisterScreen() {
               />
             </View>
             {!isEmailValid && email.length > 0 && (
-              <Text style={styles.errorText}>Formato de email inválido.</Text>
+              <Text
+                style={[styles.errorText, { color: themeColors.destructive }]}
+              >
+                Formato de email inválido.
+              </Text>
             )}
+
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
-              <MaterialIcons name="lock" size={20} color={themeColors.icon} />
+              {/* CORREÇÃO 1: Padronizando ícone para lock-outline */}
+              <MaterialIcons
+                name="lock-outline"
+                size={20}
+                color={themeColors.icon}
+              />
               <TextInput
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Senha"
@@ -146,16 +167,27 @@ export default function RegisterScreen() {
                 />
               </TouchableOpacity>
             </View>
+
+            {/* CORREÇÃO 2: Alinhamento do texto de ajuda */}
             <View style={styles.passwordRequirementContainer}>
-              <Text style={{ color: themeColors.icon }}>
+              <Text
+                style={{ color: themeColors.icon, fontSize: 12, opacity: 0.8 }}
+              >
                 (mínimo 6 caracteres)
               </Text>
               {passwordStrength.strength.length > 0 && (
-                <Text style={{ color: passwordStrength.color }}>
+                <Text
+                  style={{
+                    color: passwordStrength.color,
+                    fontSize: 12,
+                    fontWeight: "bold",
+                  }}
+                >
                   Força: {passwordStrength.strength}
                 </Text>
               )}
             </View>
+
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
@@ -182,12 +214,14 @@ export default function RegisterScreen() {
                 />
               </TouchableOpacity>
             </View>
+
             <TouchableOpacity
               style={[styles.button, { backgroundColor: themeColors.accent }]}
               onPress={handleNavigateToWelcome}
             >
               <Text style={styles.buttonText}>Continuar</Text>
             </TouchableOpacity>
+
             <Link href="/login" style={styles.link}>
               <ThemedText type="link">
                 Já tem uma conta? Faça o login
@@ -204,6 +238,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
   content: {
+    flexGrow: 1, // Garante que o scroll funcione bem
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
@@ -211,10 +246,12 @@ const styles = StyleSheet.create({
   logo: {
     width: 120,
     height: 120,
-    marginBottom: 15,
+    marginBottom: 20,
+    borderRadius: 60, // Deixa a logo redonda se for quadrada, mais místico
   },
   title: {
-    marginBottom: 20,
+    marginBottom: 25,
+    fontSize: 28,
   },
   inputContainer: {
     flexDirection: "row",
@@ -236,7 +273,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: "100%",
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 25,
   },
   buttonText: {
     color: "#FFFFFF",
@@ -248,16 +285,16 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   errorText: {
-    color: Colors.light.destructive,
     alignSelf: "flex-start",
-    marginLeft: 5,
+    marginLeft: 16, // Alinha com o texto do input (padding 15 + 1 borda)
     marginBottom: 5,
+    fontSize: 12,
   },
   passwordRequirementContainer: {
     flexDirection: "row",
     width: "100%",
     justifyContent: "space-between",
-    paddingHorizontal: 5,
+    paddingHorizontal: 16, // Aumentado de 5 para 16 para alinhar com o texto do input
     marginBottom: 10,
   },
 });

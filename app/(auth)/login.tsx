@@ -9,15 +9,16 @@ import { Link } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -75,7 +76,7 @@ export default function LoginScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.flex}
         >
-          <View style={styles.content}>
+          <ScrollView contentContainerStyle={styles.content}>
             <Image
               source={require("@/assets/images/icon.png")}
               style={styles.logo}
@@ -93,12 +94,16 @@ export default function LoginScreen() {
                 {
                   borderColor:
                     !isEmailValid && email.length > 0
-                      ? Colors.light.destructive
+                      ? themeColors.destructive
                       : themeColors.icon,
                 },
               ]}
             >
-              <MaterialIcons name="email" size={20} color={themeColors.icon} />
+              <MaterialIcons
+                name="mail-outline"
+                size={20}
+                color={themeColors.icon}
+              />
               <TextInput
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Email"
@@ -110,7 +115,12 @@ export default function LoginScreen() {
               />
             </View>
             {!isEmailValid && email.length > 0 && (
-              <Text style={styles.validationErrorText}>
+              <Text
+                style={[
+                  styles.validationErrorText,
+                  { color: themeColors.destructive },
+                ]}
+              >
                 Formato de email inválido.
               </Text>
             )}
@@ -118,7 +128,11 @@ export default function LoginScreen() {
             <View
               style={[styles.inputContainer, { borderColor: themeColors.icon }]}
             >
-              <MaterialIcons name="lock" size={20} color={themeColors.icon} />
+              <MaterialIcons
+                name="lock-outline"
+                size={20}
+                color={themeColors.icon}
+              />
               <TextInput
                 style={[styles.input, { color: themeColors.text }]}
                 placeholder="Senha"
@@ -136,7 +150,16 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {error ? <Text style={styles.formErrorText}>{error}</Text> : null}
+            {error ? (
+              <Text
+                style={[
+                  styles.formErrorText,
+                  { color: themeColors.destructive },
+                ]}
+              >
+                {error}
+              </Text>
+            ) : null}
 
             <TouchableOpacity
               style={[styles.button, { backgroundColor: themeColors.accent }]}
@@ -155,7 +178,7 @@ export default function LoginScreen() {
                 Não tem uma conta? Cadastre-se
               </ThemedText>
             </Link>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </ThemedView>
@@ -166,7 +189,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
@@ -175,6 +198,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     marginBottom: 15,
+    borderRadius: 60, // Borda redonda para consistência
   },
   title: {
     marginBottom: 8,
@@ -213,18 +237,18 @@ const styles = StyleSheet.create({
   },
   link: {
     marginTop: 20,
+    paddingBottom: 20,
   },
   formErrorText: {
-    color: Colors.light.destructive,
     marginTop: 15,
     marginBottom: 5,
     textAlign: "center",
     fontWeight: "bold",
   },
   validationErrorText: {
-    color: Colors.light.destructive,
     alignSelf: "flex-start",
-    marginLeft: 5,
+    marginLeft: 16, // Alinhado com o texto do input
     marginBottom: 5,
+    fontSize: 12,
   },
 });

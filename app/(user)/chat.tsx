@@ -1,4 +1,3 @@
-// app/(user)/chat.tsx
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
@@ -6,29 +5,42 @@ import { useChat } from "@/contexts/ChatContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { logSendMessage } from "@/lib/analytics";
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native";
+import { Audio } from "expo-av";
+import * as Speech from "expo-speech";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TextStyle, // Import TextStyle para tipagem
+  TextStyle,
   TouchableOpacity,
   View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 
-// Tipos
 type ChatMessage = {
   role: "user" | "model";
   parts: { text: string }[];
 };
 
-// Configuração de geração
 const generationConfig = {
   temperature: 1,
   topP: 0.95,
@@ -38,7 +50,18 @@ const generationConfig = {
 };
 
 const SYSTEM_INSTRUCTION =
-  "Você é um tutor experiente preparando estudantes brasileiros para vestibulares FUVEST e ENEM. Dê explicações claras, cite exemplos do contexto acadêmico, incentive métodos de estudo ativos e responda sempre em português.";
+  "Você é um guia místico experiente, especialista em astrologia, cristais, tarot e energias sutis. " +
+  "Seu objetivo é ajudar o usuário a encontrar equilíbrio e autoconhecimento. " +
+  "Responda sempre com empatia, usando uma linguagem acolhedora e levemente esotérica. " +
+  "Ao sugerir conselhos, baseie-se em trânsitos planetários gerais, propriedades de pedras ou arquétipos do tarot. " +
+  "Responda sempre em Português do Brasil.";
+
+const STARTER_QUESTIONS = [
+  "🔮 Qual a energia de hoje?",
+  "❤️ Previsão para o amor",
+  "💎 Qual cristal usar?",
+  "🌙 Como está a lua hoje?",
+];
 
 export default function ChatScreen() {
   const {
@@ -49,12 +72,86 @@ export default function ChatScreen() {
     getChatModel,
   } = useChat();
 
+  const route = useRoute();
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    if ("setOptions" in navigation) {
+      (navigation as any).setOptions({ headerShown: false });
+    }
+  }, [navigation]);
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [maleVoiceId, setMaleVoiceId] = useState<string | null>(null); // ID da voz masculina
+
   const flatListRef = useRef<FlatList>(null);
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
+
+  // 1. Configura Áudio para funcionar no Silencioso
+  useEffect(() => {
+    const configureAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+      } catch (error) {
+        console.log("Erro ao configurar áudio:", error);
+      }
+    };
+    configureAudio();
+  }, []);
+
+  // 2. Busca Voz Masculina (Joaquim ou similar)
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        const voices = await Speech.getAvailableVoicesAsync();
+
+        // Tenta achar "Joaquim" (Padrão iOS PT-PT)
+        const joaquim = voices.find(
+          (v) => v.name === "Joaquim" && v.language.includes("pt-PT")
+        );
+
+        if (joaquim) {
+          setMaleVoiceId(joaquim.identifier);
+        } else {
+          // Tenta qualquer voz com "Male" no identificador ou nome para PT
+          const anyMale = voices.find(
+            (v) =>
+              v.language.includes("pt") &&
+              (v.identifier.toLowerCase().includes("male") ||
+                v.name.toLowerCase().includes("male"))
+          );
+          if (anyMale) setMaleVoiceId(anyMale.identifier);
+        }
+      } catch (e) {
+        console.log("Erro ao buscar vozes", e);
+      }
+    };
+    fetchVoices();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const params = route.params as { initialPrompt?: string } | undefined;
+
+      if (params?.initialPrompt) {
+        setInput(params.initialPrompt);
+        navigation.setParams({ initialPrompt: undefined } as any);
+      }
+
+      return () => {
+        Speech.stop();
+        setSpeakingText(null);
+      };
+    }, [route.params, navigation])
+  );
 
   const messages = useMemo(
     () => selectedConversation?.messages ?? [],
@@ -63,7 +160,10 @@ export default function ChatScreen() {
   const canSendMessage = input.trim().length > 0 && !loading;
 
   useEffect(() => {
-    setInput("");
+    const params = route.params as { initialPrompt?: string } | undefined;
+    if (!params?.initialPrompt) {
+      setInput("");
+    }
     setSuggestedQuestions([]);
   }, [selectedConversation?.id]);
 
@@ -76,207 +176,52 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
-  // --- Funções de Envio e Sugestões ---
+  const handleSpeak = async (text: string) => {
+    const isSpeaking = await Speech.isSpeakingAsync();
+
+    if (isSpeaking && speakingText === text) {
+      Speech.stop();
+      setSpeakingText(null);
+    } else {
+      Speech.stop();
+      setSpeakingText(text);
+
+      // Se achou voz masculina nativa, usa pitch normal. Se não, usa pitch grave (0.75) para simular.
+      const pitch = maleVoiceId ? 1.0 : 0.75;
+
+      Speech.speak(text, {
+        language: "pt-PT",
+        voice: maleVoiceId || undefined,
+        pitch: pitch,
+        rate: 0.9,
+        onDone: () => setSpeakingText(null),
+        onStopped: () => setSpeakingText(null),
+        onError: () => setSpeakingText(null),
+      });
+    }
+  };
+
   const parseSuggestedQuestions = (raw: string): string[] => {
-    // ...(lógica de parse inalterada)...
-    if (!raw) {
-      return [];
-    }
-    // Helper to remove ```json ... ``` wrappers and trim
-    const sanitizeRaw = (input: string) =>
-      input
-        .trim()
-        .replace(/^```(?:json)?/i, "")
-        .replace(/```$/i, "")
-        .replace(/^json\s*/i, "")
-        .trim();
-
-    // Helper to normalize a single potential question string
-    const normalizeQuestionCandidate = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return "";
-      }
-      // Remove leading/trailing quotes (single, double, smart)
-      const stripQuotes = trimmed
-        .replace(/^[\s"'`“”«»]+/, "")
-        .replace(/[\s"'`“”«»]+$/, "");
-      // Remove trailing punctuation except question marks, condense spaces
-      const stripTrailingPunctuation = stripQuotes
-        .replace(/[\s,;:]+$/, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (!stripTrailingPunctuation) {
-        return "";
-      }
-      // Ensure only one question mark at the end, if any
-      const singleQuestionMark = stripTrailingPunctuation.replace(/\?+$/, "?");
-      // Add question mark if missing
-      return singleQuestionMark.endsWith("?")
-        ? singleQuestionMark
-        : `${singleQuestionMark}?`;
-    };
-
-    // Helper to split lines that might contain multiple enumerated or question-separated items
-    const splitCombinedEntries = (items: string[]) => {
-      const expanded: string[] = [];
-      items.forEach((item) => {
-        const trimmed = item.trim();
-        if (!trimmed) return;
-
-        // Try splitting by common list markers (like "1.", "-", "•") at the start of lines or after whitespace
-        const enumeratedParts = trimmed
-          .split(/(?:^|\s)(?:\d+\s*[.)]|[-•])\s*/g)
-          .map((part) => part.trim())
-          .filter((part) => part.length > 0);
-
-        if (enumeratedParts.length >= 2) {
-          // Successfully split by enumeration
-          enumeratedParts.forEach((part) => {
-            const normalized = normalizeQuestionCandidate(part);
-            if (normalized) expanded.push(normalized);
-          });
-          return; // Skip further processing for this item
-        }
-
-        // Try splitting by question marks followed by optional space or end of line
-        const questionSegments = trimmed
-          .split(/\?(?:\s+|$)/)
-          .map((segment) => segment.trim())
-          .filter((segment) => segment.length > 0);
-
-        if (questionSegments.length > 1) {
-          // Successfully split by question marks
-          questionSegments.forEach((segment) => {
-            const normalized = normalizeQuestionCandidate(segment);
-            if (normalized) expanded.push(normalized);
-          });
-          return; // Skip further processing for this item
-        }
-
-        // If no splits occurred, treat the item as a single candidate
-        const normalized = normalizeQuestionCandidate(trimmed);
-        if (normalized) expanded.push(normalized);
-      });
-      return expanded;
-    };
-
-    // Helper to remove duplicates and limit to 3
-    const dedupeAndTrim = (items: string[]) => {
-      const seen = new Set<string>();
-      const results: string[] = [];
-      items.forEach((item) => {
-        const normalized = item.replace(/\s+/g, " ").trim(); // Normalize whitespace
-        if (!normalized) return;
-        const key = normalized.toLowerCase(); // Case-insensitive check
-        if (!seen.has(key)) {
-          seen.add(key);
-          results.push(normalized);
-        }
-      });
-      return results.slice(0, 3); // Limit to max 3
-    };
-
-    const normalizeSuggestions = (items: string[]) =>
-      dedupeAndTrim(splitCombinedEntries(items));
-
-    // 1. Sanitize the input first
-    const cleanedRaw = sanitizeRaw(raw);
-
-    // 2. Try parsing as JSON array
+    if (!raw) return [];
     try {
-      const parsed = JSON.parse(cleanedRaw);
-      if (Array.isArray(parsed)) {
-        return normalizeSuggestions(
-          parsed
-            .map((item) => (typeof item === "string" ? item.trim() : ""))
-            .filter((item) => item.length > 0)
-        );
+      const start = raw.indexOf("[");
+      const end = raw.lastIndexOf("]");
+      if (start !== -1 && end !== -1) {
+        const json = raw.substring(start, end + 1);
+        return JSON.parse(json);
       }
-    } catch {
-      /* Ignore parsing errors, proceed to next method */
+    } catch (e) {
+      console.error("Erro ao parsear sugestões:", e);
     }
-
-    // 3. Try normalizing single quotes to double quotes for pseudo-JSON
-    if (/^\s*\[.*\]\s*$/.test(cleanedRaw)) {
-      const normalized = cleanedRaw
-        .replace(/\s*,\s*\]/g, "]")
-        .replace(/\s*,\s*\}/g, "}")
-        .replace(/'([^']*)'/g, '"$1"');
-      try {
-        const parsed = JSON.parse(normalized);
-        if (Array.isArray(parsed)) {
-          return normalizeSuggestions(
-            parsed
-              .map((item) => (typeof item === "string" ? item.trim() : ""))
-              .filter((item) => item.length > 0)
-          );
-        }
-      } catch {
-        /* Fall through to string splitting */
-      }
-    }
-
-    // 4. Fallback: Split by lines, handle list markers
-    const fallbackSource = cleanedRaw
-      .replace(/\r/g, "\n")
-      .replace(/^[\s\[]+/, "")
-      .replace(/[\]\s]+$/, "")
-      .trim();
-    const rawLines = fallbackSource
-      .replace(/\n{2,}/g, "\n")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-
-    if (rawLines.length === 0) {
-      return [];
-    }
-
-    // Try to handle cases where a single line might contain multiple items separated by markers
-    const aggregated: string[] = [];
-    rawLines.forEach((line) => {
-      // Match common list prefixes like '1.', '-', '•'
-      const bulletMatch = line.match(/^([-•]|\d+[.)])\s*(.*)$/);
-      const cleanedLine = bulletMatch
-        ? bulletMatch[2].trim()
-        : line
-            .replace(/^["'`\[]+/, "")
-            .replace(/["'`\]]+$/, "")
-            .trim();
-
-      // If it starts like a list item or it's the first line, assume new item
-      if (bulletMatch || aggregated.length === 0) {
-        if (cleanedLine) aggregated.push(cleanedLine);
-      } else {
-        // Append to the last item if it doesn't look like a new list item (heuristic)
-        if (aggregated.length > 0) {
-          aggregated[aggregated.length - 1] = `${
-            aggregated[aggregated.length - 1]
-          } ${cleanedLine}`.trim();
-        } else if (cleanedLine) {
-          aggregated.push(cleanedLine);
-        }
-      }
-    });
-
-    return normalizeSuggestions(
-      aggregated
-        .map((item) => item.replace(/["'`]+$/g, "").trim())
-        .filter((item) => item.length > 0)
-    );
+    return [];
   };
 
   const getFollowUpSuggestions = async (
     previousQuestion: string,
     answer: string
   ): Promise<string[]> => {
-    // ...(lógica inalterada)...
-    const model = getChatModel({
-      systemInstruction: SYSTEM_INSTRUCTION,
-    }); // Obtém o modelo do contexto
-    if (!model) return []; // Retorna vazio se o modelo não estiver disponível
+    const model = getChatModel({ systemInstruction: SYSTEM_INSTRUCTION });
+    if (!model) return [];
 
     try {
       const followUpResult = await model.generateContent({
@@ -285,8 +230,7 @@ export default function ChatScreen() {
             role: "user",
             parts: [
               {
-                // Prompt aprimorado para garantir JSON
-                text: `Given the last user question and the assistant's answer, suggest exactly 3 concise follow-up questions in Portuguese that the user might ask next to continue the conversation productively focused on the FUVEST or ENEM. Format the response ONLY as a valid JSON array of strings, like ["Question 1?", "Question 2?", "Question 3?"]. Do not include any other text before or after the JSON array.
+                text: `Given the last user question and the assistant's answer, suggest exactly 3 concise follow-up questions in Portuguese that the user might ask next to deepen their spiritual or astrological understanding. Format the response ONLY as a valid JSON array of strings, like ["Qual meu cristal?", "E o amor?", "Previsão hoje?"]. Do not include any other text.
 
 User Question: "${previousQuestion}"
 Assistant Answer: "${answer}"
@@ -297,34 +241,38 @@ Follow-up suggestions (JSON array only):`,
           },
         ],
         generationConfig: {
-          temperature: 0.5, // Temperatura mais baixa pode ajudar na consistência
+          temperature: 0.5,
           maxOutputTokens: 256,
-          topP: 0.9,
-          topK: 40,
         },
       });
 
       const raw = followUpResult.response.text().trim();
       return parseSuggestedQuestions(raw);
     } catch (error) {
-      console.error("Erro ao gerar sugestão de pergunta:", error);
       return [];
     }
   };
 
-  const handleSendMessage = async () => {
-    // ...(lógica inalterada)...
-    if (!canSendMessage || !selectedConversation) return;
+  const handleSendMessage = async (textOverride?: string) => {
+    const textToSend = textOverride || input;
 
-    const model = getChatModel({
-      systemInstruction: SYSTEM_INSTRUCTION,
-    }); // Obtém o modelo do contexto
+    if (
+      (!textToSend.trim() && !input.trim()) ||
+      loading ||
+      !selectedConversation
+    )
+      return;
+
+    const model = getChatModel({ systemInstruction: SYSTEM_INSTRUCTION });
     if (!model) {
-      Alert.alert("Erro", "Não foi possível inicializar o modelo de IA.");
+      Alert.alert("Erro", "Não foi possível conectar ao Oráculo.");
       return;
     }
 
-    const trimmedInput = input.trim();
+    Speech.stop();
+    setSpeakingText(null);
+
+    const trimmedInput = textToSend.trim();
     const conversationId = selectedConversation.id;
     const previousMessages = [...selectedConversation.messages];
     const userMessage: ChatMessage = {
@@ -332,7 +280,6 @@ Follow-up suggestions (JSON array only):`,
       parts: [{ text: trimmedInput }],
     };
 
-    // Atualização otimista
     updateConversationMessages(conversationId, (prev) => [
       ...prev,
       userMessage,
@@ -354,7 +301,6 @@ Follow-up suggestions (JSON array only):`,
         parts: [{ text: responseText }],
       };
 
-      // Atualiza com a resposta da IA
       updateConversationMessages(conversationId, (prev) => [
         ...prev,
         modelMessage,
@@ -372,10 +318,9 @@ Follow-up suggestions (JSON array only):`,
         );
       }
     } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
       const errorMessage: ChatMessage = {
         role: "model",
-        parts: [{ text: "Desculpe, ocorreu um erro. Tente novamente." }],
+        parts: [{ text: "As energias estão confusas. Tente novamente." }],
       };
       updateConversationMessages(conversationId, (prev) => [
         ...prev,
@@ -387,67 +332,76 @@ Follow-up suggestions (JSON array only):`,
   };
 
   const handleApplySuggestion = (suggestion: string) => {
-    // ...(lógica inalterada)...
-    setInput(suggestion);
-    setSuggestedQuestions([]);
+    handleSendMessage(suggestion);
   };
 
-  // --- Define estilos básicos para o Markdown ---
-  // CORREÇÃO: Tipar fontWeight explicitamente
   const markdownStyles = useMemo(
     () => ({
       body: {
         fontSize: 16,
-        lineHeight: 22,
+        lineHeight: 24,
         color: themeColors.text,
-      } satisfies TextStyle, // Usa 'satisfies' para checagem sem alargar o tipo
+      } satisfies TextStyle,
       strong: {
-        fontWeight: "bold" as const, // Define como o literal 'bold'
-        // A cor será sobrescrita dinamicamente
+        fontWeight: "bold" as const,
+        color: themeColors.accent,
       } satisfies TextStyle,
-      list_item: {
-        marginVertical: 4,
-        // Cor será sobrescrita dinamicamente
-      } satisfies TextStyle,
-      // Adicione outros estilos conforme necessário
+      list_item: { marginVertical: 4 } satisfies TextStyle,
     }),
     [themeColors.text]
   );
 
-  // --- Renderização ---
+  const handleOpenSidebar = useCallback(() => {
+    const parent = navigation.getParent?.();
+    if (parent && typeof (parent as any).openDrawer === "function") {
+      (parent as any).openDrawer();
+      return;
+    }
+    if (typeof (navigation as any).openDrawer === "function") {
+      (navigation as any).openDrawer();
+      return;
+    }
+    console.warn("[Chat] Drawer navigation indisponível.");
+  }, [navigation]);
+
   if (!hydrated || authLoading) {
-    // ...(loading indicator inalterado)...
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={themeColors.accent} />
-        <ThemedText style={[styles.loadingText, { color: themeColors.text }]}>
-          Carregando...
-        </ThemedText>
-      </ThemedView>
-    );
-  }
-
-  if (!selectedConversation) {
-    // ...(nenhuma conversa selecionada inalterado)...
-    return (
-      <ThemedView style={styles.loadingContainer}>
-        <ThemedText>Nenhuma conversa selecionada.</ThemedText>
+        <ThemedText>Sintonizando frequências...</ThemedText>
       </ThemedView>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"} // Define o comportamento
-      style={styles.keyboardAvoiding} // Adiciona um estilo flex: 1
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0} // Ajuste o offset se necessário (altura do header, etc.)
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.keyboardAvoiding}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <ThemedView style={styles.container}>
-        {/* Lista de Mensagens */}
+        <View
+          style={[
+            styles.topBarContainer,
+            { backgroundColor: themeColors.background },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.topBarButton}
+            onPress={handleOpenSidebar}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir guia místico"
+          >
+            <MaterialIcons name="menu" size={20} color={themeColors.accent} />
+            <Text style={[styles.topBarText, { color: themeColors.accent }]}>
+              Guia Místico
+            </Text>
+          </TouchableOpacity>
+        </View>
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(_, index) => `${selectedConversation.id}-${index}`}
+          keyExtractor={(_, index) => `${selectedConversation?.id}-${index}`}
           contentContainerStyle={[
             styles.messagesList,
             messages.length === 0 && styles.messagesListEmpty,
@@ -464,26 +418,53 @@ Follow-up suggestions (JSON array only):`,
                     item.role === "user"
                       ? themeColors.accent
                       : themeColors.card,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 2,
+                  elevation: 2,
                 },
               ]}
             >
+              {item.role === "model" && (
+                <View style={styles.modelHeader}>
+                  <MaterialIcons
+                    name="auto-awesome"
+                    size={16}
+                    color={themeColors.accent}
+                  />
+                  <TouchableOpacity
+                    onPress={() => handleSpeak(item.parts[0].text)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons
+                      name={
+                        speakingText === item.parts[0].text
+                          ? "stop-circle"
+                          : "volume-up"
+                      }
+                      size={20}
+                      color={
+                        speakingText === item.parts[0].text
+                          ? themeColors.destructive
+                          : themeColors.icon
+                      }
+                    />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <Markdown
-                // CORREÇÃO: Assegura que o tipo dos estilos passados seja compatível
                 style={{
                   body: {
                     ...markdownStyles.body,
                     color: item.role === "user" ? "#FFFFFF" : themeColors.text,
                   },
                   strong: {
-                    ...markdownStyles.strong, // Inclui fontWeight: 'bold'
-                    color: item.role === "user" ? "#FFFFFF" : themeColors.text, // Define a cor
+                    ...markdownStyles.strong,
+                    color:
+                      item.role === "user" ? "#FFFFFF" : themeColors.accent,
                   },
-                  list_item: {
-                    ...markdownStyles.list_item,
-                    color: item.role === "user" ? "#FFFFFF" : themeColors.text,
-                    // A lib pode precisar de mais estilos para bullet points, etc.
-                  },
-                  // Adicione outros estilos aqui se necessário
                 }}
               >
                 {item.parts[0].text}
@@ -492,16 +473,43 @@ Follow-up suggestions (JSON array only):`,
           )}
           ListEmptyComponent={
             <View style={styles.listEmpty}>
-              <MaterialIcons
-                name="auto-awesome"
-                size={48}
-                color={themeColors.icon + "80"}
-              />
-              <ThemedText
-                style={[styles.listEmptyText, { color: themeColors.text }]}
+              <View
+                style={[
+                  styles.iconCircle,
+                  { backgroundColor: themeColors.accent + "20" },
+                ]}
               >
-                Como posso te ajudar a estudar hoje?
+                <MaterialIcons
+                  name="psychology"
+                  size={64}
+                  color={themeColors.accent}
+                />
+              </View>
+              <ThemedText type="title" style={styles.emptyTitle}>
+                Oráculo Virtual
               </ThemedText>
+              <ThemedText style={styles.listEmptyText}>
+                O universo está pronto para ouvir suas dúvidas. Pergunte sobre
+                seu caminho, energias ou destino.
+              </ThemedText>
+
+              <View style={styles.starterContainer}>
+                {STARTER_QUESTIONS.map((q, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[
+                      styles.starterChip,
+                      {
+                        borderColor: themeColors.icon + "40",
+                        backgroundColor: themeColors.card,
+                      },
+                    ]}
+                    onPress={() => handleApplySuggestion(q)}
+                  >
+                    <Text style={{ color: themeColors.text }}>{q}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           }
           ListFooterComponent={
@@ -511,183 +519,235 @@ Follow-up suggestions (JSON array only):`,
           }
         />
 
-        {/* Área de Sugestões */}
         {suggestedQuestions.length > 0 && !loading && (
           <View style={styles.suggestionsWrapper}>
-            {suggestedQuestions.map((suggestion, index) => (
-              <TouchableOpacity
-                key={`${suggestion}-${index}`}
-                style={[
-                  styles.suggestionButton,
-                  {
-                    backgroundColor: themeColors.card + "B3",
-                    borderColor: themeColors.icon + "40",
-                  },
-                ]}
-                onPress={() => handleApplySuggestion(suggestion)}
-              >
-                <Text
-                  style={[styles.suggestionText, { color: themeColors.text }]}
+            <ThemedText style={styles.suggestionLabel}>Sugestões:</ThemedText>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingRight: 20 }}
+            >
+              {suggestedQuestions.map((suggestion, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.suggestionButton,
+                    {
+                      backgroundColor: themeColors.card,
+                      borderColor: themeColors.accent,
+                    },
+                  ]}
+                  onPress={() => handleApplySuggestion(suggestion)}
                 >
-                  {suggestion}
-                </Text>
-                <MaterialIcons
-                  name="north-east"
-                  size={16}
-                  color={themeColors.icon}
-                />
-              </TouchableOpacity>
-            ))}
+                  <MaterialIcons
+                    name="auto-awesome"
+                    size={14}
+                    color={themeColors.accent}
+                  />
+                  <Text
+                    style={[styles.suggestionText, { color: themeColors.text }]}
+                  >
+                    {suggestion}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
 
-        {/* Área de Input */}
         <View
           style={[
             styles.inputAreaContainer,
             {
-              borderTopColor: themeColors.icon + "30",
               backgroundColor: themeColors.background,
+              borderTopColor: "transparent",
             },
           ]}
         >
-          <TextInput
+          <View
             style={[
-              styles.input,
+              styles.inputWrapper,
               {
                 backgroundColor: themeColors.card,
-                borderColor: themeColors.icon + "50",
-                color: themeColors.text,
+                borderColor: themeColors.icon + "30",
               },
             ]}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Digite sua dúvida..."
-            placeholderTextColor={themeColors.icon}
-            editable={!loading}
-            multiline
-          />
-          <TouchableOpacity
-            onPress={handleSendMessage}
-            style={[
-              styles.sendButton,
-              {
-                backgroundColor: canSendMessage
-                  ? themeColors.accent
-                  : themeColors.icon + "80",
-              },
-            ]}
-            disabled={!canSendMessage || loading}
           >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <MaterialIcons name="send" size={20} color="#fff" />
-            )}
-          </TouchableOpacity>
+            <TextInput
+              style={[styles.input, { color: themeColors.text }]}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Pergunte ao universo..."
+              placeholderTextColor={themeColors.icon + "80"}
+              editable={!loading}
+              multiline
+            />
+            <TouchableOpacity
+              onPress={() => handleSendMessage()}
+              style={[
+                styles.sendButton,
+                {
+                  backgroundColor: canSendMessage
+                    ? themeColors.accent
+                    : themeColors.icon + "20",
+                },
+              ]}
+              disabled={!canSendMessage || loading}
+            >
+              {loading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={canSendMessage ? "#fff" : themeColors.icon}
+                />
+              ) : (
+                <MaterialIcons
+                  name="send"
+                  size={20}
+                  color={canSendMessage ? "#fff" : themeColors.icon}
+                />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </ThemedView>
     </KeyboardAvoidingView>
   );
 }
 
-// --- Estilos ---
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardAvoiding: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  keyboardAvoiding: { flex: 1 },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     gap: 10,
   },
-  loadingText: {
-    fontSize: 16,
-  },
   messagesList: {
     flexGrow: 1,
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 20,
     paddingBottom: 10,
   },
-  messagesListEmpty: {
+  messagesListEmpty: { justifyContent: "center", alignItems: "center" },
+
+  listEmpty: { alignItems: "center", padding: 30, marginTop: 20 },
+  iconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 20,
   },
-  listEmpty: {
-    alignItems: "center",
-    padding: 20,
-  },
+  emptyTitle: { fontSize: 24, marginBottom: 10, textAlign: "center" },
   listEmptyText: {
-    marginTop: 12,
     textAlign: "center",
     fontSize: 16,
     opacity: 0.7,
+    lineHeight: 24,
+    marginBottom: 30,
   },
-  messageContainer: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    marginBottom: 12,
-    maxWidth: "85%",
-    alignSelf: "flex-start",
-  },
-  userMessageContainer: {
-    alignSelf: "flex-end",
-    borderBottomRightRadius: 6,
-  },
-  modelMessageContainer: {
-    alignSelf: "flex-start",
-    borderBottomLeftRadius: 6,
-  },
-  suggestionsWrapper: {
+  starterContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "flex-start",
+    justifyContent: "center",
+    gap: 10,
+  },
+  starterChip: {
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    marginTop: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 5,
+  },
+  topBarContainer: {
+    paddingHorizontal: 16,
+    minHeight: 80,
+    justifyContent: "flex-end",
+    paddingBottom: 12,
+  },
+  topBarButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+  },
+  topBarText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  messageContainer: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginBottom: 16,
+    maxWidth: "85%",
+  },
+  userMessageContainer: { alignSelf: "flex-end", borderBottomRightRadius: 4 },
+  modelMessageContainer: { alignSelf: "flex-start", borderBottomLeftRadius: 4 },
+
+  modelHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128,128,128,0.2)",
+  },
+
+  suggestionsWrapper: { paddingVertical: 10, paddingLeft: 16 },
+  suggestionLabel: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginBottom: 8,
+    marginLeft: 4,
   },
   suggestionButton: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 12,
+    borderRadius: 20,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    marginRight: 8,
-    marginBottom: 8,
+    marginRight: 10,
   },
-  suggestionText: {
-    fontSize: 13,
-    marginHorizontal: 6,
-  },
+  suggestionText: { fontSize: 13, marginLeft: 6 },
+
   inputAreaContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingBottom: Platform.OS === "ios" ? 20 : 10,
+  },
+  inputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    borderTopWidth: 1,
+    borderRadius: 25,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   input: {
     flex: 1,
-    borderWidth: 1.5,
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    marginRight: 8,
     fontSize: 16,
-    paddingTop: Platform.OS === "ios" ? 10 : 8,
-    paddingBottom: Platform.OS === "ios" ? 10 : 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    maxHeight: 100,
   },
   sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    marginBottom: 2,
+    marginLeft: 5,
   },
 });

@@ -15,7 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  ScrollView, // Manter ScrollView
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,15 +23,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ... (Interfaces AnalyticsEvent, DashboardStats, Period inalteradas) ...
 interface AnalyticsEvent {
   id: string;
   eventName: string;
   userId: string;
-  createdAt: {
-    seconds: number;
-    nanoseconds: number;
-  };
+  createdAt: { seconds: number; nanoseconds: number };
 }
 
 interface DashboardStats {
@@ -44,7 +40,6 @@ interface DashboardStats {
 
 type Period = "today" | "week" | "month";
 
-// Componente BarChart (Com ScrollView Horizontal)
 const BarChart = ({
   data,
   color,
@@ -61,7 +56,6 @@ const BarChart = ({
         contentContainerStyle={styles.chartScrollContent}
       >
         {data.map((item, index) => (
-          // Aumentar a largura e margem do wrapper
           <View key={index} style={styles.barWrapper}>
             <View style={styles.barAndValue}>
               <ThemedText style={styles.barValue}>{item.value}</ThemedText>
@@ -69,8 +63,7 @@ const BarChart = ({
                 style={[
                   styles.bar,
                   {
-                    // Altura base menor, altura mínima de 2px
-                    height: Math.max(2, (item.value / maxValue) * 100), // Reduzir altura máxima
+                    height: Math.max(4, (item.value / maxValue) * 100),
                     backgroundColor: color,
                   },
                 ]}
@@ -87,7 +80,6 @@ const BarChart = ({
 };
 
 export default function DashboardScreen() {
-  // ... (estados e useEffect inalterados, remover screenWidth e isSmallScreen) ...
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -97,18 +89,13 @@ export default function DashboardScreen() {
   const themeColors = Colors[colorScheme];
 
   useEffect(() => {
-    setLoading(true); // Mostra o loading ao trocar de período
+    setLoading(true);
     const getStartDate = () => {
       const now = new Date();
-      if (period === "week") {
-        const weekAgo = new Date(now.setDate(now.getDate() - 7));
-        return Timestamp.fromDate(weekAgo);
-      }
-      if (period === "month") {
-        const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
-        return Timestamp.fromDate(monthAgo);
-      }
-      // today
+      if (period === "week")
+        return Timestamp.fromDate(new Date(now.setDate(now.getDate() - 7)));
+      if (period === "month")
+        return Timestamp.fromDate(new Date(now.setMonth(now.getMonth() - 1)));
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       return Timestamp.fromDate(todayStart);
@@ -122,9 +109,9 @@ export default function DashboardScreen() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEvents: AnalyticsEvent[] = [];
-      snapshot.forEach((doc) => {
-        fetchedEvents.push({ id: doc.id, ...doc.data() } as AnalyticsEvent);
-      });
+      snapshot.forEach((doc) =>
+        fetchedEvents.push({ id: doc.id, ...doc.data() } as AnalyticsEvent)
+      );
 
       const totalEvents = fetchedEvents.length;
       const uniqueUsers = new Set(fetchedEvents.map((e) => e.userId)).size;
@@ -183,13 +170,12 @@ export default function DashboardScreen() {
       <SafeAreaView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <ThemedText type="title" style={styles.mainTitle}>
-            Dashboard
+            Painel Astral
           </ThemedText>
           <ThemedText style={styles.subtitle}>
-            Análise de comportamento dos usuários.
+            Monitoramento de energias e fluxos.
           </ThemedText>
 
-          {/* Seletor de período */}
           <View
             style={[
               styles.periodSelector,
@@ -199,57 +185,25 @@ export default function DashboardScreen() {
               },
             ]}
           >
-            <TouchableOpacity
-              onPress={() => setPeriod("today")}
-              style={[
-                styles.periodButton,
-                period === "today" && { backgroundColor: themeColors.accent },
-              ]}
-            >
-              <Text
+            {(["today", "week", "month"] as Period[]).map((p) => (
+              <TouchableOpacity
+                key={p}
+                onPress={() => setPeriod(p)}
                 style={[
-                  styles.periodText,
-                  { color: themeColors.text },
-                  period === "today" && { color: "#fff" },
+                  styles.periodButton,
+                  period === p && { backgroundColor: themeColors.accent },
                 ]}
               >
-                Hoje
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setPeriod("week")}
-              style={[
-                styles.periodButton,
-                period === "week" && { backgroundColor: themeColors.accent },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.periodText,
-                  { color: themeColors.text },
-                  period === "week" && { color: "#fff" },
-                ]}
-              >
-                7 dias
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setPeriod("month")}
-              style={[
-                styles.periodButton,
-                period === "month" && { backgroundColor: themeColors.accent },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.periodText,
-                  { color: themeColors.text },
-                  period === "month" && { color: "#fff" },
-                ]}
-              >
-                30 dias
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.periodText,
+                    { color: period === p ? "#fff" : themeColors.text },
+                  ]}
+                >
+                  {p === "today" ? "Hoje" : p === "week" ? "7 Luas" : "Ciclo"}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           {loading ? (
@@ -261,109 +215,58 @@ export default function DashboardScreen() {
           ) : (
             <>
               {stats && (
-                // Métricas sempre empilhadas
                 <View style={styles.metricsContainer}>
-                  <ThemedView
-                    lightColor={Colors.light.card}
-                    darkColor={Colors.dark.card}
-                    style={styles.metricCard}
-                  >
-                    <MaterialIcons
-                      name="show-chart"
-                      size={24}
-                      color={themeColors.icon}
-                      style={styles.metricIcon}
-                    />
-                    <ThemedText style={styles.metricLabel}>
-                      Total de Eventos
-                    </ThemedText>
-                    <ThemedText style={styles.metricValue}>
-                      {stats.totalEvents}
-                    </ThemedText>
-                  </ThemedView>
-                  <ThemedView
-                    lightColor={Colors.light.card}
-                    darkColor={Colors.dark.card}
-                    style={styles.metricCard}
-                  >
-                    <MaterialIcons
-                      name="people"
-                      size={24}
-                      color={themeColors.icon}
-                      style={styles.metricIcon}
-                    />
-                    <ThemedText style={styles.metricLabel}>
-                      Usuários Únicos
-                    </ThemedText>
-                    <ThemedText style={styles.metricValue}>
-                      {stats.uniqueUsers}
-                    </ThemedText>
-                  </ThemedView>
-                  <ThemedView
-                    lightColor={Colors.light.card}
-                    darkColor={Colors.dark.card}
-                    style={styles.metricCard}
-                  >
-                    <MaterialIcons
-                      name="today"
-                      size={24}
-                      color={themeColors.icon}
-                      style={styles.metricIcon}
-                    />
-                    <ThemedText style={styles.metricLabel}>
-                      DAU (Hoje)
-                    </ThemedText>
-                    <ThemedText style={styles.metricValue}>
-                      {stats.dau}
-                    </ThemedText>
-                  </ThemedView>
-                  <ThemedView
-                    lightColor={Colors.light.card}
-                    darkColor={Colors.dark.card}
-                    style={styles.metricCard}
-                  >
-                    <MaterialIcons
-                      name="date-range"
-                      size={24}
-                      color={themeColors.icon}
-                      style={styles.metricIcon}
-                    />
-                    <ThemedText style={styles.metricLabel}>
-                      MAU (Mês)
-                    </ThemedText>
-                    <ThemedText style={styles.metricValue}>
-                      {stats.mau}
-                    </ThemedText>
-                  </ThemedView>
+                  <MetricCard
+                    icon="auto-awesome"
+                    label="Rituais Realizados"
+                    value={stats.totalEvents}
+                    color={themeColors.icon}
+                  />
+                  <MetricCard
+                    icon="groups"
+                    label="Almas Conectadas"
+                    value={stats.uniqueUsers}
+                    color={themeColors.icon}
+                  />
+                  <MetricCard
+                    icon="sunny"
+                    label="Ativos (Hoje)"
+                    value={stats.dau}
+                    color={themeColors.icon}
+                  />
+                  <MetricCard
+                    icon="nightlight-round"
+                    label="Ativos (Ciclo)"
+                    value={stats.mau}
+                    color={themeColors.icon}
+                  />
                 </View>
               )}
 
-              {/* Card Gráfico */}
               <ThemedView
                 lightColor={Colors.light.card}
                 darkColor={Colors.dark.card}
                 style={styles.card}
               >
                 <ThemedText type="subtitle" style={styles.cardTitle}>
-                  Eventos por Categoria
+                  Fluxo de Atividades
                 </ThemedText>
                 {chartData.length > 0 ? (
                   <BarChart data={chartData} color={themeColors.accent} />
                 ) : (
                   <ThemedText style={styles.placeholderText}>
-                    Nenhum evento registrado no período.
+                    O silêncio impera.
                   </ThemedText>
                 )}
               </ThemedView>
 
-              {/* Card Atividades Recentes */}
               <ThemedView
                 lightColor={Colors.light.card}
                 darkColor={Colors.dark.card}
                 style={styles.card}
               >
                 <ThemedText type="subtitle" style={styles.cardTitle}>
-                  Últimas Atividades
+                  Últimas Manifestações
                 </ThemedText>
                 {recentEvents.length > 0 ? (
                   recentEvents.map((event, index) => (
@@ -381,7 +284,7 @@ export default function DashboardScreen() {
                       </ThemedText>
                       <ThemedText style={styles.eventTime}>
                         {new Date(
-                          event.createdAt?.seconds * 1000
+                          event.createdAt.seconds * 1000
                         ).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -391,7 +294,7 @@ export default function DashboardScreen() {
                   ))
                 ) : (
                   <ThemedText style={styles.placeholderText}>
-                    Nenhum evento recente no período.
+                    Nenhuma manifestação recente.
                   </ThemedText>
                 )}
               </ThemedView>
@@ -403,29 +306,29 @@ export default function DashboardScreen() {
   );
 }
 
+const MetricCard = ({ icon, label, value, color }: any) => (
+  <ThemedView
+    lightColor={Colors.light.card}
+    darkColor={Colors.dark.card}
+    style={styles.metricCard}
+  >
+    <MaterialIcons name={icon} size={24} color={color} />
+    <ThemedText style={styles.metricLabel}>{label}</ThemedText>
+    <ThemedText style={styles.metricValue}>{value}</ThemedText>
+  </ThemedView>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  loadingIndicator: {
-    marginTop: 50,
-    alignSelf: "center",
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  mainTitle: {
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginBottom: 24,
-  },
+  loadingIndicator: { marginTop: 50 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
+  mainTitle: { marginBottom: 4 },
+  subtitle: { fontSize: 16, opacity: 0.7, marginBottom: 24 },
   periodSelector: {
     flexDirection: "row",
     justifyContent: "space-around",
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     padding: 4,
     marginBottom: 24,
@@ -433,50 +336,24 @@ const styles = StyleSheet.create({
   periodButton: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 6,
+    borderRadius: 8,
     alignItems: "center",
-    marginHorizontal: 2,
   },
-  periodText: {
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  // Métricas sempre empilhadas
-  metricsContainer: {
-    flexDirection: "column", // Alterado para coluna
-    gap: 16, // Espaço entre os cards empilhados
-    marginBottom: 16,
-  },
+  periodText: { fontWeight: "600", fontSize: 14 },
+  metricsContainer: { flexDirection: "column", gap: 12, marginBottom: 20 },
   metricCard: {
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: "row", // Ícone e texto lado a lado
-    alignItems: "center", // Alinha itens verticalmente
-    gap: 12, // Espaço entre ícone e texto
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    elevation: 2,
   },
-  metricIcon: {
-    // Não precisa de margem agora
-  },
-  metricLabel: {
-    fontSize: 14,
-    opacity: 0.8,
-    flex: 1, // Ocupa espaço para empurrar valor para direita
-  },
-  metricValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "right", // Alinha valor à direita
-  },
-  card: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  cardTitle: {
-    marginBottom: 16,
-  },
+  metricLabel: { fontSize: 15, opacity: 0.8, flex: 1 },
+  metricValue: { fontSize: 24, fontWeight: "bold" },
+  card: { borderRadius: 16, padding: 20, marginBottom: 20, elevation: 2 },
+  cardTitle: { marginBottom: 20 },
   placeholderText: {
-    marginTop: 10,
     fontStyle: "italic",
     opacity: 0.6,
     textAlign: "center",
@@ -485,56 +362,32 @@ const styles = StyleSheet.create({
   eventItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(128,128,128,0.2)", // Cor mais explícita
+    borderBottomColor: "rgba(128,128,128,0.2)",
   },
-  eventName: {
-    fontSize: 15,
-    fontWeight: "500",
-    textTransform: "capitalize",
-    flexShrink: 1,
-    marginRight: 10,
-  },
-  eventTime: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  chartContainer: {
-    height: 160, // Reduzir altura total do container do gráfico
-    marginTop: 10,
-  },
-  chartScrollContent: {
-    paddingHorizontal: 10,
-    alignItems: "flex-end", // Alinha os wrappers na base
-  },
+  eventName: { fontSize: 15, fontWeight: "500", textTransform: "capitalize" },
+  eventTime: { fontSize: 14, opacity: 0.7 },
+  chartContainer: { height: 180, marginTop: 10 },
+  chartScrollContent: { paddingHorizontal: 10, alignItems: "flex-end" },
   barWrapper: {
     alignItems: "center",
-    width: 75, // Aumentar largura para cada item (barra + label)
-    marginHorizontal: 8, // Aumentar margem horizontal
-    justifyContent: "flex-end", // Garante que labels fiquem na base
+    width: 70,
+    marginHorizontal: 6,
+    justifyContent: "flex-end",
   },
   barAndValue: {
     alignItems: "center",
-    flexDirection: "column-reverse", // Coloca o valor acima da barra
+    flexDirection: "column-reverse",
     width: "100%",
   },
-  barValue: {
-    fontSize: 11,
-    marginTop: 4, // Espaço acima do valor
-    opacity: 0.9,
-  },
-  bar: {
-    width: 30, // Largura da barra
-    borderRadius: 4,
-    minHeight: 2,
-  },
+  barValue: { fontSize: 11, marginTop: 4, opacity: 0.8 },
+  bar: { width: 24, borderRadius: 6, minHeight: 4 },
   barLabel: {
-    marginTop: 8, // Aumentar espaço acima do label
+    marginTop: 8,
     fontSize: 11,
     textAlign: "center",
     height: 30,
-    opacity: 0.8,
+    opacity: 0.7,
   },
 });
